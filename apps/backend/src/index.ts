@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import path from 'path';
 import { testConnection } from './config/database';
 import authRoutes from './routes/auth.routes';
 import campaignRoutes from './routes/campaigns.routes';
@@ -12,16 +13,18 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json());
+
+// Servir audios generados por ElevenLabs
+app.use('/audio', express.static(path.join(__dirname, '../public/audio')));
 
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/calls', callsRoutes);
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',

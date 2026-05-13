@@ -1,18 +1,44 @@
 import { Request, Response } from 'express';
 import twilio from 'twilio';
+import { ElevenLabsClient } from 'elevenlabs';
 import { supabase } from '../config/database';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
 
-// Iniciar una llamada saliente
+const elevenlabs = new ElevenLabsClient({
+  apiKey: process.env.ELEVENLABS_API_KEY
+});
+
+const generateAudio = async (text: string): Promise<string> => {
+  const audioStream = await elevenlabs.textToSpeech.convert('FGY2WhTYpPnrIDTdsKH5', {
+    text,
+    model_id: 'eleven_multilingual_v2',
+    voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+  });
+
+  const audioDir = path.join(__dirname, '../../public/audio');
+  if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
+
+  const fileName = `call_${Date.now()}.mp3`;
+  const filePath = path.join(audioDir, fileName);
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of audioStream) {
+    chunks.push(Buffer.from(chunk));
+  }
+  fs.writeFileSync(filePath, Buffer.concat(chunks));
+  return fileName;
+};
+
 export const makeCall = async (req: any, res: Response) => {
   const { contactId } = req.params;
 
   try {
-    // Obtener contacto
     const { data: contact, error } = await supabase
       .from('contacts')
       .select('*, campaigns(*)')
@@ -24,25 +50,23 @@ export const makeCall = async (req: any, res: Response) => {
       return res.status(404).json({ error: 'Contacto no encontrado' });
     }
 
-    // Iniciar llamada con Twilio
+    const texto = `Hola ${contact.name || ''}. Mi nombre es Sofía y le llamo de parte de nuestra empresa. Tenemos una propuesta especial que puede interesarle. Gracias por su tiempo. Que tenga un excelente día.`;
+
+    console.log('🎙️ Generando audio con ElevenLabs...');
+    const audioFileName = await generateAudio(texto);
+    const audioUrl = `${process.env.API_URL}/audio/${audioFileName}`;
+    console.log('✅ Audio generado:', audioUrl);
+
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Play>${audioUrl}</Play></Response>`;
+
     const call = await twilioClient.calls.create({
       to: contact.phone,
       from: process.env.TWILIO_PHONE_NUMBER!,
-      twiml: `<Response>
-        <Say language="es-MX" voice="Polly.Mia">
-          Hola ${contact.name || 'buen día'}, mi nombre es Sofía y le llamo de parte de nuestra empresa.
-          ¿Tiene un momento para hablar?
-        </Say>
-        <Pause length="3"/>
-        <Say language="es-MX" voice="Polly.Mia">
-          Gracias por su tiempo. Le llamaremos nuevamente pronto. Que tenga un excelente día.
-        </Say>
-      </Response>`,
+      twiml,
       statusCallback: `${process.env.API_URL}/api/calls/status`,
       statusCallbackMethod: 'POST'
     });
 
-    // Guardar registro de llamada
     const { data: callRecord } = await supabase
       .from('calls')
       .insert({
@@ -55,7 +79,6 @@ export const makeCall = async (req: any, res: Response) => {
       .select()
       .single();
 
-    // Actualizar stage del contacto
     await supabase
       .from('contacts')
       .update({ status: 'called', pipeline_stage: 'called' })
@@ -65,19 +88,18 @@ export const makeCall = async (req: any, res: Response) => {
       message: 'Llamada iniciada',
       callSid: call.sid,
       callId: callRecord?.id,
+      audioUrl,
       contact: { name: contact.name, phone: contact.phone }
     });
 
   } catch (err: any) {
-    console.error('Error Twilio:', err);
+    console.error('Error:', err);
     return res.status(500).json({ error: err.message });
   }
 };
 
-// Webhook de status de Twilio
 export const callStatus = async (req: Request, res: Response) => {
   const { CallSid, CallStatus, CallDuration } = req.body;
-
   try {
     await supabase
       .from('calls')
@@ -87,16 +109,13 @@ export const callStatus = async (req: Request, res: Response) => {
         ended_at: new Date().toISOString()
       })
       .eq('status', 'initiated');
-
     console.log(`📞 Llamada ${CallSid} — Status: ${CallStatus} — Duración: ${CallDuration}s`);
     res.status(200).send('OK');
   } catch (err: any) {
-    console.error(err);
     res.status(500).send('Error');
   }
 };
 
-// Listar llamadas del tenant
 export const getCalls = async (req: any, res: Response) => {
   try {
     const { data, error } = await supabase
@@ -105,7 +124,6 @@ export const getCalls = async (req: any, res: Response) => {
       .eq('tenant_id', req.user.tenantId)
       .order('created_at', { ascending: false })
       .limit(50);
-
     if (error) throw error;
     return res.json({ calls: data });
   } catch (err: any) {
