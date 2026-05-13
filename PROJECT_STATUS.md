@@ -1,6 +1,6 @@
 # VoiceAgent — Estado del proyecto
 
-## Última actualización: Fase 1 — Semana 3 completada
+## Última actualización: Fase 2 — Semana 4 completada
 
 ## ✅ Completado
 - Node.js 24 + npm + Git + Homebrew instalados
@@ -9,14 +9,16 @@
 - Supabase conectado correctamente
 - 7 tablas creadas: tenants, users, agent_configs, campaigns, contacts, calls, whatsapp_notifications
 - Autenticación JWT completa: register, login, middleware, getProfile
-- CRUD completo de campañas
-- CRUD completo de contactos con carga masiva
+- CRUD completo de campañas y contactos con carga masiva
 - Pipeline stages funcionando
+- ✅ TWILIO INTEGRADO — llamadas salientes funcionando
+- Primera llamada real recibida en +52 8120746187
 
 ## 🔧 Stack activo
 - Backend: Node.js + Express + TypeScript
 - Base de datos: Supabase (PostgreSQL)
 - Auth: JWT + bcrypt
+- Telefonía: Twilio Voice
 - Deploy: local por ahora, siguiente paso Railway
 
 ## 📁 Estructura
@@ -29,11 +31,13 @@ voiceagent/
 │   │   │   ├── controllers/
 │   │   │   │   ├── auth.controller.ts
 │   │   │   │   ├── campaigns.controller.ts
-│   │   │   │   └── contacts.controller.ts
+│   │   │   │   ├── contacts.controller.ts
+│   │   │   │   └── calls.controller.ts
 │   │   │   ├── middlewares/auth.ts
 │   │   │   └── routes/
 │   │   │       ├── auth.routes.ts
-│   │   │       └── campaigns.routes.ts
+│   │   │       ├── campaigns.routes.ts
+│   │   │       └── calls.routes.ts
 │   │   ├── .env
 │   │   └── package.json
 │   └── frontend/        ← pendiente Fase 3
@@ -42,11 +46,13 @@ voiceagent/
 ## 🔑 Datos de prueba activos
 - Tenant: Acme Corp (a4dfd65a-c823-4197-91e0-57ea46bf336b)
 - Campaña: Campaña Seguros Junio (9321f89b-54ed-4db9-8475-dfbb2da9b028)
-- Contactos: 4 creados
+- Contactos: 5 creados
+- Llamada de prueba: CA0d442c74934cf38e26d189b881c47479
 
 ## ⏭️ Siguiente sesión
-Fase 2 Semana 4: Integración Twilio — llamadas salientes
+Fase 2 Semana 5: Pipeline IA — conectar GPT-4o + ElevenLabs para conversación real
 
 ## 🔑 Servicios activos
 - Supabase proyecto: ivxyqpxcudklkvksbqyd
 - GitHub: robcas0180ai/voiceagent
+- Twilio: número USA activo
