@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { testConnection } from './config/database';
 import authRoutes from './routes/auth.routes';
 import campaignRoutes from './routes/campaigns.routes';
+import callsRoutes from './routes/calls.routes';
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.use(express.json());
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
+app.use('/api/calls', callsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
