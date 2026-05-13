@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { testConnection } from './config/database';
 import authRoutes from './routes/auth.routes';
+import campaignRoutes from './routes/campaigns.routes';
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.use(express.json());
 
 // Rutas
 app.use('/api/auth', authRoutes);
+app.use('/api/campaigns', campaignRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -32,8 +34,8 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, async () => {
-  console.log(`✅ VoiceAgent API corriendo en http://localhost:${PORT}`);
-  console.log(`📋 Health check: http://localhost:${PORT}/health`);
+  console.log(`✅ VoiceAgent API corriendo en http://localhost:3001`);
+  console.log(`📋 Health check: http://localhost:3001/health`);
   await testConnection();
 });
 
