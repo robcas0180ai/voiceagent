@@ -1,6 +1,6 @@
 # VoiceAgent — Estado del proyecto
 
-## Última actualización: Fase 1 — Semana 2 completada
+## Última actualización: Fase 1 — Semana 3 completada
 
 ## ✅ Completado
 - Node.js 24 + npm + Git + Homebrew instalados
@@ -9,7 +9,9 @@
 - Supabase conectado correctamente
 - 7 tablas creadas: tenants, users, agent_configs, campaigns, contacts, calls, whatsapp_notifications
 - Autenticación JWT completa: register, login, middleware, getProfile
-- Primer tenant creado: Acme Corp
+- CRUD completo de campañas
+- CRUD completo de contactos con carga masiva
+- Pipeline stages funcionando
 
 ## 🔧 Stack activo
 - Backend: Node.js + Express + TypeScript
@@ -24,16 +26,26 @@ voiceagent/
 │   │   ├── src/
 │   │   │   ├── index.ts
 │   │   │   ├── config/database.ts
-│   │   │   ├── controllers/auth.controller.ts
+│   │   │   ├── controllers/
+│   │   │   │   ├── auth.controller.ts
+│   │   │   │   ├── campaigns.controller.ts
+│   │   │   │   └── contacts.controller.ts
 │   │   │   ├── middlewares/auth.ts
-│   │   │   └── routes/auth.routes.ts
+│   │   │   └── routes/
+│   │   │       ├── auth.routes.ts
+│   │   │       └── campaigns.routes.ts
 │   │   ├── .env
 │   │   └── package.json
 │   └── frontend/        ← pendiente Fase 3
 └── PROJECT_STATUS.md
 
+## 🔑 Datos de prueba activos
+- Tenant: Acme Corp (a4dfd65a-c823-4197-91e0-57ea46bf336b)
+- Campaña: Campaña Seguros Junio (9321f89b-54ed-4db9-8475-dfbb2da9b028)
+- Contactos: 4 creados
+
 ## ⏭️ Siguiente sesión
-Fase 1 Semana 3: API de campañas y contactos (CRUD completo)
+Fase 2 Semana 4: Integración Twilio — llamadas salientes
 
 ## 🔑 Servicios activos
 - Supabase proyecto: ivxyqpxcudklkvksbqyd
