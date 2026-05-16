@@ -3,6 +3,7 @@ import twilio from 'twilio';
 import { ElevenLabsClient } from 'elevenlabs';
 import { supabase } from '../config/database';
 import { generateResponse } from '../config/claude';
+import { sendCallSummary } from '../config/whatsapp';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -15,7 +16,6 @@ const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY
 });
 
-// Generar audio con ElevenLabs
 const generateAudio = async (text: string): Promise<string> => {
   const audioStream = await elevenlabs.textToSpeech.convert('FGY2WhTYpPnrIDTdsKH5', {
     text,
@@ -37,7 +37,6 @@ const generateAudio = async (text: string): Promise<string> => {
   return fileName;
 };
 
-// Iniciar llamada saliente
 export const makeCall = async (req: any, res: Response) => {
   const { contactId } = req.params;
 
@@ -53,7 +52,6 @@ export const makeCall = async (req: any, res: Response) => {
       return res.status(404).json({ error: 'Contacto no encontrado' });
     }
 
-    // Obtener config del agente
     const { data: agentConfig } = await supabase
       .from('agent_configs')
       .select('*')
@@ -68,9 +66,8 @@ export const makeCall = async (req: any, res: Response) => {
       tone: 'profesional y amable'
     };
 
-    // Saludo inicial con Claude
     const saludoTexto = await generateResponse(
-      `Inicia la llamada saludando a ${contact.name || 'el cliente'} y presentándote.`,
+      `Inicia la llamada saludando a ${contact.name || 'el cliente'} y presentándote brevemente.`,
       {
         agentName: agent.agent_name,
         companyName: agent.company_name,
@@ -81,12 +78,11 @@ export const makeCall = async (req: any, res: Response) => {
       []
     );
 
-    console.log('🤖 Claude generó:', saludoTexto);
+    console.log('🤖 Claude generó saludo:', saludoTexto);
 
     const audioFileName = await generateAudio(saludoTexto);
     const audioUrl = `${process.env.API_URL}/audio/${audioFileName}`;
 
-    // Guardar historial de conversación en DB
     const { data: callRecord } = await supabase
       .from('calls')
       .insert({
@@ -137,7 +133,6 @@ export const makeCall = async (req: any, res: Response) => {
   }
 };
 
-// Responder al cliente en tiempo real
 export const respondToCall = async (req: Request, res: Response) => {
   const { callId } = req.params;
   const { SpeechResult } = req.body;
@@ -145,7 +140,6 @@ export const respondToCall = async (req: Request, res: Response) => {
   console.log('🎤 Cliente dijo:', SpeechResult);
 
   try {
-    // Obtener historial de conversación
     const { data: callRecord } = await supabase
       .from('calls')
       .select('*, contacts(*, campaigns(*))')
@@ -159,7 +153,6 @@ export const respondToCall = async (req: Request, res: Response) => {
 
     const history = JSON.parse(callRecord.summary || '[]');
 
-    // Obtener config del agente
     const { data: agentConfig } = await supabase
       .from('agent_configs')
       .select('*')
@@ -174,9 +167,10 @@ export const respondToCall = async (req: Request, res: Response) => {
       tone: 'profesional y amable'
     };
 
-    // Generar respuesta con Claude
+    const userMessage = SpeechResult || 'El cliente no respondió';
+
     const respuesta = await generateResponse(
-      SpeechResult || 'El cliente no dijo nada',
+      userMessage,
       {
         agentName: agent.agent_name,
         companyName: agent.company_name,
@@ -189,10 +183,9 @@ export const respondToCall = async (req: Request, res: Response) => {
 
     console.log('🤖 Claude responde:', respuesta);
 
-    // Actualizar historial
     const newHistory = [
       ...history,
-      { role: 'user', content: SpeechResult || '' },
+      { role: 'user', content: userMessage },
       { role: 'assistant', content: respuesta }
     ];
 
@@ -201,12 +194,10 @@ export const respondToCall = async (req: Request, res: Response) => {
       .update({ summary: JSON.stringify(newHistory) })
       .eq('id', callId);
 
-    // Generar audio de respuesta
     const audioFileName = await generateAudio(respuesta);
     const audioUrl = `${process.env.API_URL}/audio/${audioFileName}`;
 
-    // Detectar fin de conversación
-    const finKeywords = ['gracias', 'adios', 'no me interesa', 'no interesa', 'hasta luego'];
+    const finKeywords = ['gracias', 'adios', 'no me interesa', 'no interesa', 'hasta luego', 'no gracias'];
     const esFin = finKeywords.some(k => respuesta.toLowerCase().includes(k));
 
     const twiml = esFin
@@ -236,26 +227,47 @@ export const respondToCall = async (req: Request, res: Response) => {
   }
 };
 
-// Webhook status Twilio
 export const callStatus = async (req: Request, res: Response) => {
   const { CallSid, CallStatus, CallDuration } = req.body;
+
   try {
-    await supabase
+    const { data: callRecord } = await supabase
       .from('calls')
       .update({
         status: CallStatus,
         duration_seconds: parseInt(CallDuration || '0'),
         ended_at: new Date().toISOString()
       })
-      .eq('status', 'initiated');
+      .eq('status', 'initiated')
+      .select('*, contacts(name, phone), campaigns(name)')
+      .single();
+
     console.log(`📞 Llamada ${CallSid} — Status: ${CallStatus} — Duración: ${CallDuration}s`);
+
+    // Enviar resumen por WhatsApp si la llamada completó
+    if (CallStatus === 'completed' && callRecord) {
+      const history = JSON.parse(callRecord.summary || '[]');
+      const resumenTexto = history.length > 0
+        ? history.map((h: any) => `${h.role === 'assistant' ? '🤖' : '👤'} ${h.content}`).join('\n')
+        : 'Sin conversación registrada';
+
+      await sendCallSummary(
+        callRecord.contacts?.name || 'Sin nombre',
+        callRecord.contacts?.phone || '',
+        callRecord.campaigns?.name || '',
+        parseInt(CallDuration || '0'),
+        CallStatus,
+        resumenTexto
+      );
+    }
+
     res.status(200).send('OK');
   } catch (err: any) {
+    console.error(err);
     res.status(500).send('Error');
   }
 };
 
-// Listar llamadas
 export const getCalls = async (req: any, res: Response) => {
   try {
     const { data, error } = await supabase
