@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import twilio from 'twilio';
 import { ElevenLabsClient } from 'elevenlabs';
 import { supabase } from '../config/database';
+import { generateResponse } from '../config/claude';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -14,6 +15,7 @@ const elevenlabs = new ElevenLabsClient({
   apiKey: process.env.ELEVENLABS_API_KEY
 });
 
+// Generar audio con ElevenLabs
 const generateAudio = async (text: string): Promise<string> => {
   const audioStream = await elevenlabs.textToSpeech.convert('FGY2WhTYpPnrIDTdsKH5', {
     text,
@@ -35,6 +37,7 @@ const generateAudio = async (text: string): Promise<string> => {
   return fileName;
 };
 
+// Iniciar llamada saliente
 export const makeCall = async (req: any, res: Response) => {
   const { contactId } = req.params;
 
@@ -50,23 +53,40 @@ export const makeCall = async (req: any, res: Response) => {
       return res.status(404).json({ error: 'Contacto no encontrado' });
     }
 
-    const texto = `Hola ${contact.name || ''}. Mi nombre es Sofía y le llamo de parte de nuestra empresa. Tenemos una propuesta especial que puede interesarle. Gracias por su tiempo. Que tenga un excelente día.`;
+    // Obtener config del agente
+    const { data: agentConfig } = await supabase
+      .from('agent_configs')
+      .select('*')
+      .eq('tenant_id', req.user.tenantId)
+      .single();
 
-    console.log('🎙️ Generando audio con ElevenLabs...');
-    const audioFileName = await generateAudio(texto);
+    const agent = agentConfig || {
+      agent_name: 'Sofía',
+      company_name: 'nuestra empresa',
+      product_description: 'un producto especial',
+      objections: '',
+      tone: 'profesional y amable'
+    };
+
+    // Saludo inicial con Claude
+    const saludoTexto = await generateResponse(
+      `Inicia la llamada saludando a ${contact.name || 'el cliente'} y presentándote.`,
+      {
+        agentName: agent.agent_name,
+        companyName: agent.company_name,
+        productDescription: agent.product_description,
+        objections: agent.objections || '',
+        tone: agent.tone
+      },
+      []
+    );
+
+    console.log('🤖 Claude generó:', saludoTexto);
+
+    const audioFileName = await generateAudio(saludoTexto);
     const audioUrl = `${process.env.API_URL}/audio/${audioFileName}`;
-    console.log('✅ Audio generado:', audioUrl);
 
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Play>${audioUrl}</Play></Response>`;
-
-    const call = await twilioClient.calls.create({
-      to: contact.phone,
-      from: process.env.TWILIO_PHONE_NUMBER!,
-      twiml,
-      statusCallback: `${process.env.API_URL}/api/calls/status`,
-      statusCallbackMethod: 'POST'
-    });
-
+    // Guardar historial de conversación en DB
     const { data: callRecord } = await supabase
       .from('calls')
       .insert({
@@ -74,6 +94,7 @@ export const makeCall = async (req: any, res: Response) => {
         contact_id: contactId,
         campaign_id: contact.campaign_id,
         status: 'initiated',
+        summary: JSON.stringify([{ role: 'assistant', content: saludoTexto }]),
         started_at: new Date().toISOString()
       })
       .select()
@@ -84,11 +105,29 @@ export const makeCall = async (req: any, res: Response) => {
       .update({ status: 'called', pipeline_stage: 'called' })
       .eq('id', contactId);
 
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Play>${audioUrl}</Play>
+  <Gather input="speech" language="es-MX" timeout="5" speechTimeout="2"
+    action="${process.env.API_URL}/api/calls/respond/${callRecord?.id}"
+    method="POST">
+    <Pause length="1"/>
+  </Gather>
+</Response>`;
+
+    const call = await twilioClient.calls.create({
+      to: contact.phone,
+      from: process.env.TWILIO_PHONE_NUMBER!,
+      twiml,
+      statusCallback: `${process.env.API_URL}/api/calls/status`,
+      statusCallbackMethod: 'POST'
+    });
+
     return res.json({
       message: 'Llamada iniciada',
       callSid: call.sid,
       callId: callRecord?.id,
-      audioUrl,
+      saludoTexto,
       contact: { name: contact.name, phone: contact.phone }
     });
 
@@ -98,6 +137,106 @@ export const makeCall = async (req: any, res: Response) => {
   }
 };
 
+// Responder al cliente en tiempo real
+export const respondToCall = async (req: Request, res: Response) => {
+  const { callId } = req.params;
+  const { SpeechResult } = req.body;
+
+  console.log('🎤 Cliente dijo:', SpeechResult);
+
+  try {
+    // Obtener historial de conversación
+    const { data: callRecord } = await supabase
+      .from('calls')
+      .select('*, contacts(*, campaigns(*))')
+      .eq('id', callId)
+      .single();
+
+    if (!callRecord) {
+      res.type('text/xml');
+      return res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
+    }
+
+    const history = JSON.parse(callRecord.summary || '[]');
+
+    // Obtener config del agente
+    const { data: agentConfig } = await supabase
+      .from('agent_configs')
+      .select('*')
+      .eq('tenant_id', callRecord.contacts.tenant_id)
+      .single();
+
+    const agent = agentConfig || {
+      agent_name: 'Sofía',
+      company_name: 'nuestra empresa',
+      product_description: 'un producto especial',
+      objections: '',
+      tone: 'profesional y amable'
+    };
+
+    // Generar respuesta con Claude
+    const respuesta = await generateResponse(
+      SpeechResult || 'El cliente no dijo nada',
+      {
+        agentName: agent.agent_name,
+        companyName: agent.company_name,
+        productDescription: agent.product_description,
+        objections: agent.objections || '',
+        tone: agent.tone
+      },
+      history
+    );
+
+    console.log('🤖 Claude responde:', respuesta);
+
+    // Actualizar historial
+    const newHistory = [
+      ...history,
+      { role: 'user', content: SpeechResult || '' },
+      { role: 'assistant', content: respuesta }
+    ];
+
+    await supabase
+      .from('calls')
+      .update({ summary: JSON.stringify(newHistory) })
+      .eq('id', callId);
+
+    // Generar audio de respuesta
+    const audioFileName = await generateAudio(respuesta);
+    const audioUrl = `${process.env.API_URL}/audio/${audioFileName}`;
+
+    // Detectar fin de conversación
+    const finKeywords = ['gracias', 'adios', 'no me interesa', 'no interesa', 'hasta luego'];
+    const esFin = finKeywords.some(k => respuesta.toLowerCase().includes(k));
+
+    const twiml = esFin
+      ? `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Play>${audioUrl}</Play>
+  <Pause length="1"/>
+  <Hangup/>
+</Response>`
+      : `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Play>${audioUrl}</Play>
+  <Gather input="speech" language="es-MX" timeout="5" speechTimeout="2"
+    action="${process.env.API_URL}/api/calls/respond/${callId}"
+    method="POST">
+    <Pause length="1"/>
+  </Gather>
+</Response>`;
+
+    res.type('text/xml');
+    return res.send(twiml);
+
+  } catch (err: any) {
+    console.error('Error respondiendo:', err);
+    res.type('text/xml');
+    return res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
+  }
+};
+
+// Webhook status Twilio
 export const callStatus = async (req: Request, res: Response) => {
   const { CallSid, CallStatus, CallDuration } = req.body;
   try {
@@ -116,6 +255,7 @@ export const callStatus = async (req: Request, res: Response) => {
   }
 };
 
+// Listar llamadas
 export const getCalls = async (req: any, res: Response) => {
   try {
     const { data, error } = await supabase

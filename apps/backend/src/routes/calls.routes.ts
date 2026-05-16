@@ -1,11 +1,12 @@
 import { Router } from 'express';
-import { makeCall, callStatus, getCalls } from '../controllers/calls.controller';
+import { makeCall, respondToCall, callStatus, getCalls } from '../controllers/calls.controller';
 import { authMiddleware } from '../middlewares/auth';
 
 const router = Router();
 
-// Webhook de Twilio (sin auth)
+// Webhooks de Twilio (sin auth)
 router.post('/status', callStatus);
+router.post('/respond/:callId', respondToCall);
 
 // Rutas protegidas
 router.use(authMiddleware);
