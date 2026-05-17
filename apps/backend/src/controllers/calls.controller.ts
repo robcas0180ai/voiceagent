@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import twilio from 'twilio';
 import { ElevenLabsClient } from 'elevenlabs';
 import { supabase } from '../config/database';
-import { generateResponse } from '../config/claude';
+import { generateResponse, generateSummary } from '../config/claude';
 import { sendCallSummary } from '../config/whatsapp';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -37,6 +37,17 @@ const generateAudio = async (text: string): Promise<string> => {
   return fileName;
 };
 
+// Mapear resultado de Claude a pipeline stage
+const resultToStage = (result: string): string => {
+  const map: any = {
+    interesado: 'interested',
+    no_interesado: 'not_interested',
+    callback: 'callback',
+    continuar: 'called'
+  };
+  return map[result] || 'called';
+};
+
 export const makeCall = async (req: any, res: Response) => {
   const { contactId } = req.params;
 
@@ -66,7 +77,7 @@ export const makeCall = async (req: any, res: Response) => {
       tone: 'profesional y amable'
     };
 
-    const saludoTexto = await generateResponse(
+    const { text: saludoTexto } = await generateResponse(
       `Inicia la llamada saludando a ${contact.name || 'el cliente'} y presentándote brevemente.`,
       {
         agentName: agent.agent_name,
@@ -90,6 +101,7 @@ export const makeCall = async (req: any, res: Response) => {
         contact_id: contactId,
         campaign_id: contact.campaign_id,
         status: 'initiated',
+        result: 'en_curso',
         summary: JSON.stringify([{ role: 'assistant', content: saludoTexto }]),
         started_at: new Date().toISOString()
       })
@@ -169,7 +181,7 @@ export const respondToCall = async (req: Request, res: Response) => {
 
     const userMessage = SpeechResult || 'El cliente no respondió';
 
-    const respuesta = await generateResponse(
+    const { text: respuesta, result } = await generateResponse(
       userMessage,
       {
         agentName: agent.agent_name,
@@ -181,7 +193,7 @@ export const respondToCall = async (req: Request, res: Response) => {
       history
     );
 
-    console.log('🤖 Claude responde:', respuesta);
+    console.log('🤖 Claude responde:', respuesta, '| Resultado:', result);
 
     const newHistory = [
       ...history,
@@ -189,16 +201,29 @@ export const respondToCall = async (req: Request, res: Response) => {
       { role: 'assistant', content: respuesta }
     ];
 
+    // Actualizar historial y resultado en la llamada
     await supabase
       .from('calls')
-      .update({ summary: JSON.stringify(newHistory) })
+      .update({
+        summary: JSON.stringify(newHistory),
+        result: result !== 'continuar' ? result : callRecord.result
+      })
       .eq('id', callId);
+
+    // Si hay resultado definitivo, actualizar el pipeline del contacto
+    if (result && result !== 'continuar') {
+      const newStage = resultToStage(result);
+      await supabase
+        .from('contacts')
+        .update({ pipeline_stage: newStage })
+        .eq('id', callRecord.contact_id);
+      console.log(`📊 Pipeline actualizado: ${newStage}`);
+    }
 
     const audioFileName = await generateAudio(respuesta);
     const audioUrl = `${process.env.API_URL}/audio/${audioFileName}`;
 
-    const finKeywords = ['gracias', 'adios', 'no me interesa', 'no interesa', 'hasta luego', 'no gracias'];
-    const esFin = finKeywords.some(k => respuesta.toLowerCase().includes(k));
+    const esFin = result === 'interesado' || result === 'no_interesado' || result === 'callback';
 
     const twiml = esFin
       ? `<?xml version="1.0" encoding="UTF-8"?>
@@ -239,26 +264,40 @@ export const callStatus = async (req: Request, res: Response) => {
         ended_at: new Date().toISOString()
       })
       .eq('status', 'initiated')
-      .select('*, contacts(name, phone), campaigns(name)')
+      .select('*, contacts(name, phone, id), campaigns(name)')
       .single();
 
     console.log(`📞 Llamada ${CallSid} — Status: ${CallStatus} — Duración: ${CallDuration}s`);
 
-    // Enviar resumen por WhatsApp si la llamada completó
     if (CallStatus === 'completed' && callRecord) {
-      const history = JSON.parse(callRecord.summary || '[]');
-      const resumenTexto = history.length > 0
-        ? history.map((h: any) => `${h.role === 'assistant' ? '🤖' : '👤'} ${h.content}`).join('\n')
-        : 'Sin conversación registrada';
+      // Si no contestó o llamada muy corta, marcar como to_call para reintentar
+      if (parseInt(CallDuration || '0') < 5) {
+        await supabase
+          .from('contacts')
+          .update({ pipeline_stage: 'to_call' })
+          .eq('id', callRecord.contacts?.id);
+        console.log('📵 No contestó — regresando a Por llamar');
+      }
 
-      await sendCallSummary(
-        callRecord.contacts?.name || 'Sin nombre',
-        callRecord.contacts?.phone || '',
-        callRecord.campaigns?.name || '',
-        parseInt(CallDuration || '0'),
-        CallStatus,
-        resumenTexto
-      );
+      // Generar resumen con IA
+      const history = JSON.parse(callRecord.summary || '[]');
+      if (history.length > 1) {
+        const resumenIA = await generateSummary(history, callRecord.contacts?.name || 'el cliente');
+        await supabase
+          .from('calls')
+          .update({ summary: resumenIA })
+          .eq('id', callRecord.id);
+
+        // Enviar WhatsApp
+        await sendCallSummary(
+          callRecord.contacts?.name || 'Sin nombre',
+          callRecord.contacts?.phone || '',
+          callRecord.campaigns?.name || '',
+          parseInt(CallDuration || '0'),
+          callRecord.result || CallStatus,
+          resumenIA
+        );
+      }
     }
 
     res.status(200).send('OK');
