@@ -2,7 +2,18 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
-import { Phone, Plus, ArrowLeft, LogOut } from 'lucide-react';
+import { Phone, Plus, ArrowLeft, LogOut, Upload, X, Trash2 } from 'lucide-react';
+import CSVUpload from '@/components/ui/CSVUpload';
+
+const normalizePhone = (raw: string): string => {
+  let digits = String(raw).replace(/\D/g, '');
+  if (digits.startsWith('521') && digits.length === 13) digits = digits.slice(2);
+  if (digits.startsWith('52') && digits.length === 12) digits = digits.slice(2);
+  if (digits.startsWith('1') && digits.length === 11) digits = digits.slice(1);
+  if (digits.length > 10) digits = digits.slice(-10);
+  if (digits.length !== 10) return '';
+  return `+52${digits}`;
+};
 
 export default function CampaignDetailPage() {
   const router = useRouter();
@@ -11,8 +22,12 @@ export default function CampaignDetailPage() {
   const [contacts, setContacts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [calling, setCalling] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [showCSV, setShowCSV] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', phone: '' });
+  const [phoneError, setPhoneError] = useState('');
+  const [deleteError, setDeleteError] = useState<{id: string, msg: string} | null>(null);
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
@@ -43,15 +58,31 @@ export default function CampaignDetailPage() {
       fetchData();
     } catch (err: any) {
       alert('Error: ' + err.response?.data?.error);
+    } finally { setCalling(null); }
+  };
+
+  const deleteContact = async (contactId: string, contactName: string) => {
+    setDeleteError(null);
+    if (!confirm(`¿Eliminar a ${contactName || 'este contacto'}?\n\nNota: solo se puede eliminar si no tiene llamadas registradas.`)) return;
+    setDeleting(contactId);
+    try {
+      await api.delete(`/api/campaigns/${id}/contacts/${contactId}`);
+      fetchData();
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Error al eliminar';
+      setDeleteError({ id: contactId, msg });
     } finally {
-      setCalling(null);
+      setDeleting(null);
     }
   };
 
   const addContact = async () => {
-    if (!newContact.phone.trim()) return;
+    setPhoneError('');
+    if (!newContact.phone.trim()) { setPhoneError('El teléfono es requerido'); return; }
+    const phone = normalizePhone(newContact.phone);
+    if (!phone) { setPhoneError('Número inválido — ingresa 10 dígitos'); return; }
     try {
-      await api.post(`/api/campaigns/${id}/contacts`, newContact);
+      await api.post(`/api/campaigns/${id}/contacts`, { ...newContact, phone });
       setNewContact({ name: '', phone: '' });
       setShowForm(false);
       fetchData();
@@ -108,37 +139,75 @@ export default function CampaignDetailPage() {
             <h1 className="text-2xl font-semibold">{campaign?.name}</h1>
             <p className="text-gray-400 text-sm mt-1">{contacts.length} contactos</p>
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={16} /> Agregar contacto
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setShowCSV(!showCSV); setShowForm(false); }}
+              className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              <Upload size={16} /> Importar CSV
+            </button>
+            <button
+              onClick={() => { setShowForm(!showForm); setShowCSV(false); setPhoneError(''); }}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={16} /> Agregar contacto
+            </button>
+          </div>
         </div>
 
+        {/* CSV Upload */}
+        {showCSV && (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-sm">Importar contactos desde CSV</h3>
+              <button onClick={() => setShowCSV(false)} className="text-gray-600 hover:text-gray-400"><X size={16} /></button>
+            </div>
+            <CSVUpload campaignId={id as string} onSuccess={() => { setShowCSV(false); fetchData(); }} />
+          </div>
+        )}
+
+        {/* Formulario manual */}
         {showForm && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6 flex gap-3">
-            <input
-              type="text"
-              value={newContact.name}
-              onChange={e => setNewContact({ ...newContact, name: e.target.value })}
-              placeholder="Nombre"
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-            />
-            <input
-              type="text"
-              value={newContact.phone}
-              onChange={e => setNewContact({ ...newContact, phone: e.target.value })}
-              placeholder="+52 81 1234 5678"
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
-            />
-            <button onClick={addContact} className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg transition-colors">Agregar</button>
-            <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-white text-sm px-4 py-2 rounded-lg transition-colors">Cancelar</button>
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
+            <div className="flex gap-3 items-start">
+              <div className="flex-1">
+                <input
+                  type="text"
+                  value={newContact.name}
+                  onChange={e => setNewContact({ ...newContact, name: e.target.value })}
+                  placeholder="Nombre (opcional)"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="flex-1">
+                <div className="flex">
+                  <div className="flex items-center bg-gray-700 border border-gray-600 border-r-0 rounded-l-lg px-3 text-sm text-gray-300 whitespace-nowrap">
+                    🇲🇽 +52
+                  </div>
+                  <input
+                    type="text"
+                    value={newContact.phone}
+                    onChange={e => { setNewContact({ ...newContact, phone: e.target.value }); setPhoneError(''); }}
+                    placeholder="81 1234 5678"
+                    className={`flex-1 bg-gray-800 border rounded-r-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-blue-500 ${phoneError ? 'border-red-500' : 'border-gray-700'}`}
+                  />
+                </div>
+                {phoneError && <p className="text-xs text-red-400 mt-1">{phoneError}</p>}
+              </div>
+              <button onClick={addContact} className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-2 rounded-lg transition-colors whitespace-nowrap">Agregar</button>
+              <button onClick={() => { setShowForm(false); setPhoneError(''); }} className="text-gray-400 hover:text-white p-2"><X size={16} /></button>
+            </div>
           </div>
         )}
 
         {loading ? (
           <div className="text-center text-gray-400 py-12">Cargando...</div>
+        ) : contacts.length === 0 ? (
+          <div className="text-center text-gray-400 py-12">
+            <Upload size={32} className="mx-auto mb-3 opacity-30" />
+            <p className="mb-2">No hay contactos en esta campaña</p>
+            <p className="text-sm">Importa un CSV o agrega contactos manualmente</p>
+          </div>
         ) : (
           <div className="bg-gray-900 border border-gray-800 rounded-xl">
             <table className="w-full">
@@ -154,21 +223,34 @@ export default function CampaignDetailPage() {
                 {contacts.map(c => (
                   <tr key={c.id} className="border-b border-gray-800 last:border-0 hover:bg-gray-800/50 transition-colors">
                     <td className="px-6 py-3 text-sm font-medium">{c.name || '—'}</td>
-                    <td className="px-6 py-3 text-sm text-gray-300">{c.phone}</td>
+                    <td className="px-6 py-3 text-sm text-gray-300 font-mono">{c.phone}</td>
                     <td className="px-6 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded border ${stageBadge(c.pipeline_stage)}`}>
                         {stageLabel[c.pipeline_stage] || c.pipeline_stage}
                       </span>
                     </td>
                     <td className="px-6 py-3">
-                      <button
-                        onClick={() => makeCall(c.id)}
-                        disabled={calling === c.id}
-                        className="flex items-center gap-1.5 text-xs bg-blue-950 text-blue-400 border border-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-900 disabled:opacity-50 transition-colors"
-                      >
-                        <Phone size={12} />
-                        {calling === c.id ? 'Llamando...' : 'Llamar'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => makeCall(c.id)}
+                          disabled={calling === c.id}
+                          className="flex items-center gap-1.5 text-xs bg-blue-950 text-blue-400 border border-blue-800 px-3 py-1.5 rounded-lg hover:bg-blue-900 disabled:opacity-50 transition-colors"
+                        >
+                          <Phone size={12} />
+                          {calling === c.id ? 'Llamando...' : 'Llamar'}
+                        </button>
+                        <button
+                          onClick={() => deleteContact(c.id, c.name)}
+                          disabled={deleting === c.id}
+                          className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-red-400 disabled:opacity-50 transition-colors p-1.5"
+                          title="Eliminar contacto"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                      {deleteError?.id === c.id && (
+                        <p className="text-xs text-red-400 mt-1 max-w-xs">{deleteError.msg}</p>
+                      )}
                     </td>
                   </tr>
                 ))}

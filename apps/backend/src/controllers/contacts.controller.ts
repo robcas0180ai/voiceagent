@@ -111,3 +111,36 @@ export const updateContactStage = async (req: any, res: Response) => {
     return res.status(500).json({ error: err.message });
   }
 };
+
+// Eliminar contacto (solo si no tiene llamadas)
+export const deleteContact = async (req: any, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    // Verificar si tiene llamadas
+    const { data: calls, error: callsError } = await supabase
+      .from('calls')
+      .select('id')
+      .eq('contact_id', id)
+      .limit(1);
+
+    if (callsError) throw callsError;
+
+    if (calls && calls.length > 0) {
+      return res.status(400).json({
+        error: 'No se puede eliminar este contacto porque ya tiene llamadas registradas. El consumo de minutos y llamadas se mantiene en tu plan.'
+      });
+    }
+
+    const { error } = await supabase
+      .from('contacts')
+      .delete()
+      .eq('id', id)
+      .eq('tenant_id', req.user.tenantId);
+
+    if (error) throw error;
+    return res.json({ message: 'Contacto eliminado' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+};
