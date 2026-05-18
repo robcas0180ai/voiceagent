@@ -136,11 +136,10 @@ export const makeCall = async (req: any, res: Response) => {
 
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Play>${audioUrl}</Play>
-  <Gather input="speech" language="es-US" speechModel="phone_call" timeout="5" speechTimeout="2"
+  <Gather input="speech" language="es-US" speechModel="phone_call" timeout="10" speechTimeout="3"
     action="${process.env.API_URL}/api/calls/respond/${callRecord?.id}"
     method="POST">
-    <Pause length="2"/>
+    <Play>${audioUrl}</Play>
   </Gather>
 </Response>`;
 
@@ -259,11 +258,10 @@ export const respondToCall = async (req: Request, res: Response) => {
 </Response>`
       : `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Play>${audioUrl}</Play>
-  <Gather input="speech" language="es-US" speechModel="phone_call" timeout="5" speechTimeout="2"
+  <Gather input="speech" language="es-US" speechModel="phone_call" timeout="10" speechTimeout="3"
     action="${process.env.API_URL}/api/calls/respond/${callId}"
     method="POST">
-    <Pause length="2"/>
+    <Play>${audioUrl}</Play>
   </Gather>
 </Response>`;
 
