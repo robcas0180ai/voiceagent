@@ -1,27 +1,20 @@
 import { Request, Response } from 'express';
 import twilio from 'twilio';
-import { ElevenLabsClient } from 'elevenlabs';
 import { supabase } from '../config/database';
 import { generateResponse, generateSummary } from '../config/claude';
 import { sendCallSummary } from '../config/whatsapp';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
 
-const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVEN_API_KEY || process.env.ELEVENLABS_API_KEY
-});
-
 const generateAudio = async (text: string): Promise<string> => {
-  const audioStream = await elevenlabs.textToSpeech.convert('FGY2WhTYpPnrIDTdsKH5', {
-    text,
-    model_id: 'eleven_multilingual_v2',
-    voice_settings: { stability: 0.5, similarity_boost: 0.75 }
-  });
+  const apiKey = process.env.ELEVENLABS_API_KEY || '';
+  const voiceId = 'FGY2WhTYpPnrIDTdsKH5';
 
   const audioDir = path.join(__dirname, '../../public/audio');
   if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
@@ -29,12 +22,41 @@ const generateAudio = async (text: string): Promise<string> => {
   const fileName = `call_${Date.now()}.mp3`;
   const filePath = path.join(audioDir, fileName);
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of audioStream) {
-    chunks.push(Buffer.from(chunk));
-  }
-  fs.writeFileSync(filePath, Buffer.concat(chunks));
-  return fileName;
+  const body = JSON.stringify({
+    text,
+    model_id: 'eleven_multilingual_v2',
+    voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+  });
+
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'api.elevenlabs.io',
+      path: `/v1/text-to-speech/${voiceId}`,
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      if (res.statusCode !== 200) {
+        reject(new Error(`ElevenLabs HTTP ${res.statusCode}`));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        fs.writeFileSync(filePath, Buffer.concat(chunks));
+        resolve(fileName);
+      });
+    });
+
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
 };
 
 const resultToStage = (result: string): string => {
