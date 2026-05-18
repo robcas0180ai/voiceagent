@@ -2,21 +2,19 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { Phone, Users, TrendingUp, Clock, LogOut, ChevronDown, ChevronUp } from 'lucide-react';
+import { Phone, Users, TrendingUp, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import React from 'react';
+import Navbar from '@/components/ui/Navbar';
 
 export default function DashboardPage() {
   const router = useRouter();
   const [calls, setCalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { router.push('/login'); return; }
-    const u = localStorage.getItem('user');
-    if (u) setUser(JSON.parse(u));
     fetchCalls();
   }, []);
 
@@ -26,12 +24,6 @@ export default function DashboardPage() {
       setCalls(data.calls || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    router.push('/login');
   };
 
   const completed = calls.filter(c => c.status === 'completed').length;
@@ -45,7 +37,6 @@ export default function DashboardPage() {
       completed: 'bg-green-950 text-green-400 border-green-800',
       initiated: 'bg-blue-950 text-blue-400 border-blue-800',
       'no-answer': 'bg-yellow-950 text-yellow-400 border-yellow-800',
-      busy: 'bg-red-950 text-red-400 border-red-800',
       failed: 'bg-red-950 text-red-400 border-red-800',
     };
     return map[status] || 'bg-gray-800 text-gray-400 border-gray-700';
@@ -66,7 +57,6 @@ export default function DashboardPage() {
     no_interesado: '✗ No interesado',
     callback: '↩ Rellamar',
     en_curso: '● En curso',
-    continuar: '● En curso'
   };
 
   const renderSummary = (summary: string) => {
@@ -94,26 +84,9 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold text-lg">VoiceAgent</span>
-          <div className="flex gap-4 text-sm">
-            <button onClick={() => router.push('/dashboard')} className="text-white font-medium">Dashboard</button>
-            <button onClick={() => router.push('/campaigns')} className="text-gray-400 hover:text-white transition-colors">Campañas</button>
-            <button onClick={() => router.push('/pipeline')} className="text-gray-400 hover:text-white transition-colors">Pipeline</button>
-            <button onClick={() => router.push("/agent")} className="text-gray-400 hover:text-white transition-colors">Agente IA</button>
-            <button onClick={() => router.push("/calls")} className="text-gray-400 hover:text-white transition-colors">Llamadas</button>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400">{user?.email}</span>
-          <button onClick={logout} className="text-gray-400 hover:text-white"><LogOut size={16} /></button>
-        </div>
-      </nav>
-
+      <Navbar />
       <div className="p-6 max-w-7xl mx-auto">
         <h1 className="text-2xl font-semibold mb-6">Dashboard</h1>
-
         <div className="grid grid-cols-4 gap-4 mb-6">
           {[
             { label: 'Total llamadas', value: calls.length, icon: Phone, color: 'text-blue-400' },
@@ -130,7 +103,6 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
-
         <div className="bg-gray-900 border border-gray-800 rounded-xl">
           <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
             <h2 className="font-medium">Llamadas recientes</h2>
@@ -163,9 +135,7 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-6 py-3 text-sm text-gray-300">{call.campaigns?.name || '—'}</td>
                       <td className="px-6 py-3">
-                        <span className={`text-xs px-2 py-1 rounded border ${statusBadge(call.status)}`}>
-                          {call.status}
-                        </span>
+                        <span className={`text-xs px-2 py-1 rounded border ${statusBadge(call.status)}`}>{call.status}</span>
                       </td>
                       <td className="px-6 py-3">
                         {call.result && call.result !== 'en_curso' ? (
@@ -196,7 +166,7 @@ export default function DashboardPage() {
                       <tr className="border-b border-gray-800 bg-gray-800/30">
                         <td colSpan={7} className="px-6 py-4">
                           <div className="text-sm text-gray-300 leading-relaxed max-w-3xl">
-                            <span className="text-xs text-gray-500 uppercase tracking-wide block mb-2">Resumen de la conversación</span>
+                            <span className="text-xs text-gray-500 uppercase tracking-wide block mb-2">Resumen</span>
                             {renderSummary(call.summary)}
                           </div>
                         </td>

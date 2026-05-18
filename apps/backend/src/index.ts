@@ -8,6 +8,7 @@ import authRoutes from './routes/auth.routes';
 import campaignRoutes from './routes/campaigns.routes';
 import callsRoutes from './routes/calls.routes';
 import agentRoutes from './routes/agent.routes';
+import metricsRoutes from './routes/metrics.routes';
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/calls', callsRoutes);
 app.use('/api/agent', agentRoutes);
+app.use('/api/metrics', metricsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', app: process.env.APP_NAME, version: '0.1.0', timestamp: new Date().toISOString() });

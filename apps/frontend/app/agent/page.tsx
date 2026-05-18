@@ -2,14 +2,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { Save, LogOut } from 'lucide-react';
+import { Save } from 'lucide-react';
+import Navbar from '@/components/ui/Navbar';
 
 export default function AgentPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [user, setUser] = useState<any>(null);
   const [form, setForm] = useState({
     agent_name: 'Sofía',
     gender: 'female',
@@ -26,8 +26,6 @@ export default function AgentPage() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { router.push('/login'); return; }
-    const u = localStorage.getItem('user');
-    if (u) setUser(JSON.parse(u));
     fetchConfig();
   }, []);
 
@@ -49,33 +47,12 @@ export default function AgentPage() {
     finally { setSaving(false); }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    router.push('/login');
-  };
-
   const inputClass = "w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500";
   const labelClass = "block text-sm text-gray-400 mb-1.5";
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold text-lg">VoiceAgent</span>
-          <div className="flex gap-4 text-sm">
-            <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-white transition-colors">Dashboard</button>
-            <button onClick={() => router.push('/campaigns')} className="text-gray-400 hover:text-white transition-colors">Campañas</button>
-            <button onClick={() => router.push('/pipeline')} className="text-gray-400 hover:text-white transition-colors">Pipeline</button>
-            <button onClick={() => router.push('/agent')} className="text-white font-medium">Agente IA</button>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400">{user?.email}</span>
-          <button onClick={logout} className="text-gray-400 hover:text-white"><LogOut size={16} /></button>
-        </div>
-      </nav>
-
+      <Navbar />
       <div className="p-6 max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-semibold">Configurar Agente IA</h1>
@@ -88,12 +65,10 @@ export default function AgentPage() {
             {saved ? '✅ Guardado' : saving ? 'Guardando...' : 'Guardar cambios'}
           </button>
         </div>
-
         {loading ? (
           <div className="text-center text-gray-400 py-12">Cargando...</div>
         ) : (
           <div className="space-y-6">
-            {/* Identidad */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
               <h2 className="font-medium mb-4">Identidad del agente</h2>
               <div className="grid grid-cols-3 gap-4 mb-4">
@@ -129,72 +104,37 @@ export default function AgentPage() {
                 </div>
               </div>
             </div>
-
-            {/* Producto */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
               <h2 className="font-medium mb-4">Producto y argumentos</h2>
               <div className="mb-4">
                 <label className={labelClass}>Descripción del producto</label>
-                <textarea
-                  className={`${inputClass} min-h-[80px] resize-none`}
-                  value={form.product_description}
-                  onChange={e => setForm({ ...form, product_description: e.target.value })}
-                  placeholder="Describe tu producto o servicio, beneficios principales, precio..."
-                />
+                <textarea className={`${inputClass} min-h-[80px] resize-none`} value={form.product_description} onChange={e => setForm({ ...form, product_description: e.target.value })} placeholder="Describe tu producto o servicio, beneficios principales, precio..." />
               </div>
               <div>
                 <label className={labelClass}>Manejo de objeciones</label>
-                <textarea
-                  className={`${inputClass} min-h-[80px] resize-none`}
-                  value={form.objections}
-                  onChange={e => setForm({ ...form, objections: e.target.value })}
-                  placeholder="P: Es muy caro → R: Tenemos planes desde $X. P: Ya tengo uno → R: ¿Cuándo fue la última vez que revisaste tu cobertura?"
-                />
+                <textarea className={`${inputClass} min-h-[80px] resize-none`} value={form.objections} onChange={e => setForm({ ...form, objections: e.target.value })} placeholder="P: Es muy caro → R: Tenemos planes desde $X..." />
               </div>
             </div>
-
-            {/* Comportamiento */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
               <h2 className="font-medium mb-4">Comportamiento de llamadas</h2>
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">Dejar mensaje de voz</div>
-                    <div className="text-xs text-gray-400">Si no contesta después de 3 timbres</div>
-                  </div>
-                  <button
-                    onClick={() => setForm({ ...form, voicemail_enabled: !form.voicemail_enabled })}
-                    className={`w-10 h-6 rounded-full transition-colors ${form.voicemail_enabled ? 'bg-blue-600' : 'bg-gray-700'}`}
-                  >
-                    <div className={`w-4 h-4 bg-white rounded-full mx-1 transition-transform ${form.voicemail_enabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium">Reintentar automáticamente</div>
-                    <div className="text-xs text-gray-400">Si no contesta en el primer intento</div>
-                  </div>
-                  <button
-                    onClick={() => setForm({ ...form, retry_enabled: !form.retry_enabled })}
-                    className={`w-10 h-6 rounded-full transition-colors ${form.retry_enabled ? 'bg-blue-600' : 'bg-gray-700'}`}
-                  >
-                    <div className={`w-4 h-4 bg-white rounded-full mx-1 transition-transform ${form.retry_enabled ? 'translate-x-4' : 'translate-x-0'}`} />
-                  </button>
-                </div>
-                {form.retry_enabled && (
-                  <div className="flex items-center gap-4 pl-0">
-                    <label className="text-sm text-gray-400">Número de reintentos</label>
-                    <select
-                      className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500"
-                      value={form.max_retries}
-                      onChange={e => setForm({ ...form, max_retries: parseInt(e.target.value) })}
+                {[
+                  { key: 'voicemail_enabled', label: 'Dejar mensaje de voz', desc: 'Si no contesta después de 3 timbres' },
+                  { key: 'retry_enabled', label: 'Reintentar automáticamente', desc: 'Si no contesta en el primer intento' },
+                ].map(item => (
+                  <div key={item.key} className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">{item.label}</div>
+                      <div className="text-xs text-gray-400">{item.desc}</div>
+                    </div>
+                    <button
+                      onClick={() => setForm({ ...form, [item.key]: !(form as any)[item.key] })}
+                      className={`w-10 h-6 rounded-full transition-colors relative ${(form as any)[item.key] ? 'bg-blue-600' : 'bg-gray-700'}`}
                     >
-                      <option value={1}>1 vez</option>
-                      <option value={2}>2 veces</option>
-                      <option value={3}>3 veces</option>
-                    </select>
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${(form as any)[item.key] ? 'translate-x-5' : 'translate-x-1'}`} />
+                    </button>
                   </div>
-                )}
+                ))}
               </div>
             </div>
           </div>
