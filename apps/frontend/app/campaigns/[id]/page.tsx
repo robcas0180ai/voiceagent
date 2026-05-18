@@ -248,7 +248,7 @@ export default function CampaignDetailPage() {
                           <Trash2 size={14} />
                         </button>
                       </div>
-                      {deleteError?.id === c.id && (
+                      {deleteError !== null && deleteError.id === c.id && (
                         <p className="text-xs text-red-400 mt-1 max-w-xs">{deleteError.msg}</p>
                       )}
                     </td>
