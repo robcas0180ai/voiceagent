@@ -1,27 +1,24 @@
 # VoiceAgent — Estado del proyecto
 
-## Última actualización: Fase B completada - Speech Recognition pendiente
+## Última actualización: Media Streams - audio llega pero Deepgram no transcribe
 
 ## ✅ Completado
 - Backend + Frontend en producción (Railway)
-- Autenticación JWT
-- CRUD campañas y contactos
-- Importación CSV con normalización México
 - Twilio de pago — llama a cualquier número mexicano
-- ElevenLabs Starter — Lupita habla en español en producción ✅
-- Pipeline automático — mueve contactos por etapa
-- Botón iniciar campaña completa
-- Resumen y resultado visible en dashboard
-- Página de llamadas con filtros
-- Configuración del agente (Lupita/CECOSUR)
-- Navbar compartido en todas las páginas
-- Métricas de uso
-- Grabaciones (webhook configurado, pendiente verificar guardado)
+- ElevenLabs Starter — Lupita habla en español en producción
+- Grabaciones funcionando — recording_url guardado en Supabase
+- Pipeline automático — mueve contactos por stage
+- Dashboard, métricas, campañas, pipeline CRM, llamadas
+- Navbar completo en todas las páginas
+- Media Streams conectado — eventos media llegan al WebSocket
+- Deepgram conectado
 
 ## ❌ Pendiente crítico
-- Speech Recognition — SpeechResult llega undefined
-  - Gather envuelve Play pero sigue sin transcribir
-  - Siguiente paso: Twilio Media Streams + Deepgram
+- Deepgram no transcribe el audio del cliente
+- Los eventos 'media' llegan al WebSocket correctamente
+- El audio es mulaw 8000Hz de Twilio pero Deepgram no genera transcript
+- Posible causa: el audio del cliente se mezcla con el audio de Lupita en el mismo track
+- Siguiente paso: usar track="both_tracks" o separar inbound/outbound
 
 ## 🔧 Stack activo
 - Backend: Node.js + Express + TypeScript — Railway
@@ -30,6 +27,7 @@
 - Telefonía: Twilio Voice (pago) — +19366550212
 - Voz IA: ElevenLabs Starter (FGY2WhTYpPnrIDTdsKH5)
 - LLM: Claude claude-sonnet-4-5
+- Speech Recognition: Deepgram nova-2 (conectado, pendiente transcripción)
 - WhatsApp: Twilio Sandbox
 
 ## 🔑 URLs de producción
@@ -38,13 +36,13 @@
 - GitHub: https://github.com/robcas0180ai/voiceagent
 - Supabase: ivxyqpxcudklkvksbqyd
 
-## 🔑 Credenciales de prueba
-- Email: admin@acme.com / Password123!
-- Tenant: Acme Corp
+## 🔑 Credenciales
+- admin@acme.com / Password123!
+- Tenant: Acme Corp (a4dfd65a-c823-4197-91e0-57ea46bf336b)
 - Número verificado: +528120746187
 
 ## ⏭️ Siguiente sesión
-1. Implementar Twilio Media Streams + Deepgram para speech recognition real
-2. Verificar grabaciones en Supabase
-3. Dominio personalizado
-4. Registro multi-tenant
+1. Cambiar track a "inbound_track" explícito o "both_tracks"
+2. Verificar que Deepgram recibe los chunks de audio correctamente
+3. Agregar log del tamaño de chunks enviados a Deepgram
+4. Probar conversación completa Roberto ↔ Lupita
