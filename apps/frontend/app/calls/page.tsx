@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { LogOut, Phone, Clock, ChevronDown, ChevronUp, ArrowLeft } from 'lucide-react';
+import { LogOut, Clock, ChevronDown, ChevronUp, Play } from 'lucide-react';
 import React from 'react';
 
 export default function CallsPage() {
@@ -12,6 +12,7 @@ export default function CallsPage() {
   const [user, setUser] = useState<any>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [filter, setFilter] = useState('all');
+  const [playing, setPlaying] = useState<string | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -33,6 +34,17 @@ export default function CallsPage() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     router.push('/login');
+  };
+
+  const playRecording = (callId: string, url: string) => {
+    if (playing === callId) {
+      setPlaying(null);
+      return;
+    }
+    setPlaying(callId);
+    const audio = new Audio(url);
+    audio.play();
+    audio.onended = () => setPlaying(null);
   };
 
   const resultBadge = (result: string) => {
@@ -69,8 +81,8 @@ export default function CallsPage() {
         return (
           <div className="space-y-3">
             {history.map((h: any, i: number) => (
-              <div key={i} className={`flex gap-3 ${h.role === 'assistant' ? '' : ''}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5 ${h.role === 'assistant' ? 'bg-blue-600' : 'bg-gray-600'}`}>
+              <div key={i} className="flex gap-3">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5 ${h.role === 'assistant' ? 'bg-blue-600' : 'bg-gray-600'}`}>
                   {h.role === 'assistant' ? '🤖' : '👤'}
                 </div>
                 <div className="flex-1">
@@ -124,7 +136,6 @@ export default function CallsPage() {
           <button onClick={fetchCalls} className="text-xs text-blue-400 hover:text-blue-300">Actualizar</button>
         </div>
 
-        {/* Filtros */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {[
             { key: 'all', label: 'Todas' },
@@ -160,11 +171,10 @@ export default function CallsPage() {
           <div className="space-y-3">
             {filteredCalls.map(call => (
               <div key={call.id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-                {/* Header de la llamada */}
                 <div className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center">
-                      <Phone size={16} className="text-gray-400" />
+                    <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center text-lg">
+                      📞
                     </div>
                     <div>
                       <div className="font-medium text-sm">{call.contacts?.name || 'Sin nombre'}</div>
@@ -172,7 +182,7 @@ export default function CallsPage() {
                     </div>
                     <div className="text-xs text-gray-500">{call.campaigns?.name}</div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-wrap justify-end">
                     <span className={`text-xs px-2 py-1 rounded border ${statusBadge(call.status)}`}>
                       {call.status}
                     </span>
@@ -184,16 +194,32 @@ export default function CallsPage() {
                     <div className="flex items-center gap-1 text-xs text-gray-400">
                       <Clock size={12} />
                       {call.duration_seconds
-                        ? `${Math.floor(call.duration_seconds / 60)}:${String(call.duration_seconds % 60).padStart(2, '0')} min`
+                        ? `${Math.floor(call.duration_seconds / 60)}:${String(call.duration_seconds % 60).padStart(2, '0')}`
                         : '—'}
                     </div>
                     <div className="text-xs text-gray-500">
                       {new Date(call.created_at).toLocaleString('es-MX')}
                     </div>
+
+                    {/* Botón reproducir grabación */}
+                    {call.recording_url && (
+                      <button
+                        onClick={() => playRecording(call.id, call.recording_url)}
+                        className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                          playing === call.id
+                            ? 'bg-green-950 text-green-400 border-green-800'
+                            : 'bg-gray-800 text-gray-300 border-gray-700 hover:border-gray-500'
+                        }`}
+                      >
+                        <Play size={10} />
+                        {playing === call.id ? 'Reproduciendo...' : 'Escuchar'}
+                      </button>
+                    )}
+
                     {call.summary && call.summary.length > 10 && (
                       <button
                         onClick={() => setExpanded(expanded === call.id ? null : call.id)}
-                        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors ml-2"
+                        className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
                       >
                         {expanded === call.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         {expanded === call.id ? 'Ocultar' : 'Ver detalle'}
@@ -202,7 +228,6 @@ export default function CallsPage() {
                   </div>
                 </div>
 
-                {/* Detalle expandido */}
                 {expanded === call.id && call.summary && (
                   <div className="border-t border-gray-800 p-5 bg-gray-800/30">
                     <div className="text-xs text-gray-500 uppercase tracking-wide mb-4">Conversación</div>

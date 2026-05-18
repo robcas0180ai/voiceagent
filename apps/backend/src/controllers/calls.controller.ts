@@ -37,7 +37,6 @@ const generateAudio = async (text: string): Promise<string> => {
   return fileName;
 };
 
-// Mapear resultado de Claude a pipeline stage
 const resultToStage = (result: string): string => {
   const map: any = {
     interesado: 'interested',
@@ -115,6 +114,7 @@ export const makeCall = async (req: any, res: Response) => {
 
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Record action="${process.env.API_URL}/api/calls/recording/${callRecord?.id}" method="POST" recordingStatusCallback="${process.env.API_URL}/api/calls/recording/${callRecord?.id}" recordingStatusCallbackMethod="POST" trim="trim-silence"/>
   <Play>${audioUrl}</Play>
   <Gather input="speech" language="es-MX" timeout="5" speechTimeout="2"
     action="${process.env.API_URL}/api/calls/respond/${callRecord?.id}"
@@ -127,6 +127,9 @@ export const makeCall = async (req: any, res: Response) => {
       to: contact.phone,
       from: process.env.TWILIO_PHONE_NUMBER!,
       twiml,
+      record: true,
+      recordingStatusCallback: `${process.env.API_URL}/api/calls/recording/${callRecord?.id}`,
+      recordingStatusCallbackMethod: 'POST',
       statusCallback: `${process.env.API_URL}/api/calls/status`,
       statusCallbackMethod: 'POST'
     });
@@ -201,7 +204,6 @@ export const respondToCall = async (req: Request, res: Response) => {
       { role: 'assistant', content: respuesta }
     ];
 
-    // Actualizar historial y resultado en la llamada
     await supabase
       .from('calls')
       .update({
@@ -210,7 +212,6 @@ export const respondToCall = async (req: Request, res: Response) => {
       })
       .eq('id', callId);
 
-    // Si hay resultado definitivo, actualizar el pipeline del contacto
     if (result && result !== 'continuar') {
       const newStage = resultToStage(result);
       await supabase
@@ -252,6 +253,28 @@ export const respondToCall = async (req: Request, res: Response) => {
   }
 };
 
+// Webhook de grabación
+export const recordingCallback = async (req: Request, res: Response) => {
+  const { callId } = req.params;
+  const { RecordingUrl, RecordingDuration, RecordingSid } = req.body;
+
+  try {
+    if (RecordingUrl) {
+      const recordingUrl = `${RecordingUrl}.mp3`;
+      await supabase
+        .from('calls')
+        .update({ recording_url: recordingUrl })
+        .eq('id', callId);
+
+      console.log(`🎙️ Grabación guardada: ${recordingUrl} (${RecordingDuration}s)`);
+    }
+    res.status(200).send('OK');
+  } catch (err: any) {
+    console.error('Error grabación:', err);
+    res.status(500).send('Error');
+  }
+};
+
 export const callStatus = async (req: Request, res: Response) => {
   const { CallSid, CallStatus, CallDuration } = req.body;
 
@@ -270,7 +293,6 @@ export const callStatus = async (req: Request, res: Response) => {
     console.log(`📞 Llamada ${CallSid} — Status: ${CallStatus} — Duración: ${CallDuration}s`);
 
     if (CallStatus === 'completed' && callRecord) {
-      // Si no contestó o llamada muy corta, marcar como to_call para reintentar
       if (parseInt(CallDuration || '0') < 5) {
         await supabase
           .from('contacts')
@@ -279,7 +301,6 @@ export const callStatus = async (req: Request, res: Response) => {
         console.log('📵 No contestó — regresando a Por llamar');
       }
 
-      // Generar resumen con IA
       const history = JSON.parse(callRecord.summary || '[]');
       if (history.length > 1) {
         const resumenIA = await generateSummary(history, callRecord.contacts?.name || 'el cliente');
@@ -288,7 +309,6 @@ export const callStatus = async (req: Request, res: Response) => {
           .update({ summary: resumenIA })
           .eq('id', callRecord.id);
 
-        // Enviar WhatsApp
         await sendCallSummary(
           callRecord.contacts?.name || 'Sin nombre',
           callRecord.contacts?.phone || '',
