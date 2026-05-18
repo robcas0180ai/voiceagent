@@ -101,7 +101,8 @@ export default function DashboardPage() {
             <button onClick={() => router.push('/dashboard')} className="text-white font-medium">Dashboard</button>
             <button onClick={() => router.push('/campaigns')} className="text-gray-400 hover:text-white transition-colors">Campañas</button>
             <button onClick={() => router.push('/pipeline')} className="text-gray-400 hover:text-white transition-colors">Pipeline</button>
-            <button onClick={() => router.push('/agent')} className="text-gray-400 hover:text-white transition-colors">Agente IA</button>
+            <button onClick={() => router.push("/agent")} className="text-gray-400 hover:text-white transition-colors">Agente IA</button>
+            <button onClick={() => router.push("/calls")} className="text-gray-400 hover:text-white transition-colors">Llamadas</button>
           </div>
         </div>
         <div className="flex items-center gap-3">
