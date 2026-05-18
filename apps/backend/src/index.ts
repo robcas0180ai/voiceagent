@@ -51,3 +51,25 @@ app.get('/debug-env', (req, res) => {
     eleven_key_start: process.env.ELEVEN_API_KEY?.substring(0, 8) || 'empty'
   });
 });
+
+app.get('/test-eleven', async (req, res) => {
+  const https = require('https');
+  const apiKey = process.env.ELEVENLABS_API_KEY || '';
+  
+  const options = {
+    hostname: 'api.elevenlabs.io',
+    path: '/v1/voices',
+    method: 'GET',
+    headers: { 'xi-api-key': apiKey }
+  };
+
+  const request = https.request(options, (response: any) => {
+    let data = '';
+    response.on('data', (chunk: any) => data += chunk);
+    response.on('end', () => {
+      res.json({ status: response.statusCode, body: data.substring(0, 200), key_start: apiKey.substring(0, 8) });
+    });
+  });
+  request.on('error', (e: any) => res.json({ error: e.message }));
+  request.end();
+});
