@@ -219,6 +219,7 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
     try {
       const data = JSON.parse(message.toString());
 
+      console.log('📨 WS event:', data.event);
       switch (data.event) {
         case 'start':
           streamSid = data.start.streamSid;
