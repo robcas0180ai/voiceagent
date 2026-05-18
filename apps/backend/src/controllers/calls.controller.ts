@@ -143,10 +143,11 @@ const wsUrl = process.env.API_URL!.replace('https://', 'wss://').replace('http:/
     
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Start>
+    <Stream url="${wsUrl}/api/calls/stream/${callRecord?.id}" track="inbound_track" />
+  </Start>
   <Play>${audioUrl}</Play>
-  <Connect>
-    <Stream url="${wsUrl}/api/calls/stream/${callRecord?.id}" />
-  </Connect>
+  <Pause length="30"/>
 </Response>`;
 
     const call = await twilioClient.calls.create({
