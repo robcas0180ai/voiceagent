@@ -42,3 +42,12 @@ app.listen(PORT, async () => {
 });
 
 export default app;
+
+app.get('/debug-env', (req, res) => {
+  res.json({
+    elevenlabs_key_length: process.env.ELEVENLABS_API_KEY?.length || 0,
+    elevenlabs_key_start: process.env.ELEVENLABS_API_KEY?.substring(0, 8) || 'empty',
+    eleven_key_length: process.env.ELEVEN_API_KEY?.length || 0,
+    eleven_key_start: process.env.ELEVEN_API_KEY?.substring(0, 8) || 'empty'
+  });
+});
