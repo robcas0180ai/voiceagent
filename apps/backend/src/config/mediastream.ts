@@ -1,4 +1,4 @@
-import { createClient, LiveTranscriptionEvents } from '@deepgram/sdk';
+import { DeepgramClient } from '@deepgram/sdk';
 import WebSocket from 'ws';
 import { generateResponse } from './claude';
 import { supabase } from './database';
@@ -6,7 +6,7 @@ import * as https from 'https';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const deepgramClient = createClient(process.env.DEEPGRAM_API_KEY || '');
+const deepgramClient = new DeepgramClient(process.env.DEEPGRAM_API_KEY || '', {});
 
 const generateAudio = async (text: string): Promise<Buffer> => {
   const apiKey = process.env.ELEVENLABS_API_KEY || '';
@@ -50,14 +50,11 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
   console.log(`🎙️ Media Stream conectado para llamada: ${callId}`);
 
   let streamSid = '';
-  let callSid = '';
   let conversationHistory: { role: 'user' | 'assistant'; content: string }[] = [];
   let isProcessing = false;
   let agentConfig: any = null;
   let transcript = '';
-  let silenceTimer: NodeJS.Timeout | null = null;
 
-  // Obtener historial de conversación y config del agente
   const { data: callRecord } = await supabase
     .from('calls')
     .select('*, contacts(*, campaigns(*))')
@@ -82,7 +79,6 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
     };
   }
 
-  // Conectar a Deepgram
   const deepgramLive = deepgramClient.listen.live({
     model: 'nova-2',
     language: 'es',
@@ -95,18 +91,17 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
     vad_events: true,
   });
 
-  deepgramLive.on(LiveTranscriptionEvents.Open, () => {
+  deepgramLive.on('open', () => {
     console.log('✅ Deepgram conectado');
   });
 
-  deepgramLive.on(LiveTranscriptionEvents.Transcript, async (data) => {
+  deepgramLive.on('transcript', async (data: any) => {
     const text = data.channel?.alternatives?.[0]?.transcript || '';
-    const isFinal = data.is_final;
     const speechFinal = data.speech_final;
 
     if (text) {
       transcript += ' ' + text;
-      console.log(`🎤 Deepgram [${isFinal ? 'final' : 'interim'}]: ${text}`);
+      console.log(`🎤 Deepgram: ${text}`);
     }
 
     if (speechFinal && transcript.trim() && !isProcessing) {
@@ -134,7 +129,6 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
         conversationHistory.push({ role: 'user', content: userText });
         conversationHistory.push({ role: 'assistant', content: respuesta });
 
-        // Actualizar DB
         await supabase
           .from('calls')
           .update({
@@ -143,7 +137,6 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
           })
           .eq('id', callId);
 
-        // Mover pipeline si hay resultado
         if (result && result !== 'continuar' && callRecord) {
           const stageMap: any = {
             interesado: 'interested',
@@ -158,21 +151,16 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
           }
         }
 
-        // Generar audio y enviarlo a Twilio
         const audioBuffer = await generateAudio(respuesta);
         const audioBase64 = audioBuffer.toString('base64');
 
-        // Enviar audio por WebSocket a Twilio
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(JSON.stringify({
             event: 'media',
             streamSid,
-            media: {
-              payload: audioBase64
-            }
+            media: { payload: audioBase64 }
           }));
 
-          // Si es fin de conversación, colgar
           if (result === 'interesado' || result === 'no_interesado' || result === 'callback') {
             setTimeout(() => {
               if (ws.readyState === WebSocket.OPEN) {
@@ -190,11 +178,10 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
     }
   });
 
-  deepgramLive.on(LiveTranscriptionEvents.Error, (err) => {
+  deepgramLive.on('error', (err: any) => {
     console.error('Deepgram error:', err);
   });
 
-  // Manejar mensajes de Twilio
   ws.on('message', (message: Buffer) => {
     try {
       const data = JSON.parse(message.toString());
@@ -202,14 +189,13 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
       switch (data.event) {
         case 'start':
           streamSid = data.start.streamSid;
-          callSid = data.start.callSid;
           console.log(`📞 Stream iniciado: ${streamSid}`);
           break;
 
         case 'media':
           if (deepgramLive.getReadyState() === 1) {
             const audioBuffer = Buffer.from(data.media.payload, 'base64');
-            deepgramLive.send(audioBuffer);
+            deepgramLive.send(audioBuffer.buffer as ArrayBuffer);
           }
           break;
 
