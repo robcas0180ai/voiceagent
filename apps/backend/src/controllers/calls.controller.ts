@@ -13,7 +13,7 @@ const twilioClient = twilio(
 );
 
 const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY
+  apiKey: process.env.ELEVEN_API_KEY || process.env.ELEVENLABS_API_KEY
 });
 
 const generateAudio = async (text: string): Promise<string> => {
