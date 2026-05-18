@@ -182,6 +182,39 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
     console.error('Deepgram error:', err);
   });
 
+  // Enviar saludo inicial cuando el stream conecta
+  const sendInitialAudio = async (audioUrl: string) => {
+    try {
+      const https = require('https');
+      const url = new URL(audioUrl);
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname,
+        method: 'GET'
+      };
+      const audioBuffer = await new Promise<Buffer>((resolve, reject) => {
+        const req = https.request(options, (res: any) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: any) => chunks.push(chunk));
+          res.on('end', () => resolve(Buffer.concat(chunks)));
+        });
+        req.on('error', reject);
+        req.end();
+      });
+      const audioBase64 = audioBuffer.toString('base64');
+      if (ws.readyState === WebSocket.OPEN && streamSid) {
+        ws.send(JSON.stringify({
+          event: 'media',
+          streamSid,
+          media: { payload: audioBase64 }
+        }));
+        console.log('🔊 Saludo enviado por stream');
+      }
+    } catch (err) {
+      console.error('Error enviando saludo:', err);
+    }
+  };
+
   ws.on('message', (message: Buffer) => {
     try {
       const data = JSON.parse(message.toString());
@@ -190,6 +223,12 @@ export const handleMediaStream = async (ws: WebSocket, callId: string) => {
         case 'start':
           streamSid = data.start.streamSid;
           console.log(`📞 Stream iniciado: ${streamSid}`);
+          // Enviar saludo inicial
+          const reqUrl = new URL('http://dummy' + (require('url').parse(ws.url || '').path || ''));
+          const audioUrl = reqUrl.searchParams.get('audioUrl');
+          if (audioUrl) {
+            setTimeout(() => sendInitialAudio(decodeURIComponent(audioUrl)), 500);
+          }
           break;
 
         case 'media':

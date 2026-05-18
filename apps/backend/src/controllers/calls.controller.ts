@@ -138,14 +138,14 @@ export const makeCall = async (req: any, res: Response) => {
       .eq('id', contactId);
 
     // TwiML con Media Stream + saludo inicial
-    const wsUrl = process.env.API_URL!.replace('https://', 'wss://').replace('http://', 'ws://');
+    // wsUrl
+const wsUrl = process.env.API_URL!.replace('https://', 'wss://').replace('http://', 'ws://');
     
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${wsUrl}/api/calls/stream/${callRecord?.id}" />
+    <Stream url="${wsUrl}/api/calls/stream/${callRecord?.id}?audioUrl=${encodeURIComponent(audioUrl)}" />
   </Connect>
-  <Play>${audioUrl}</Play>
 </Response>`;
 
     const call = await twilioClient.calls.create({
