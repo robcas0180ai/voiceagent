@@ -140,7 +140,7 @@ export const makeCall = async (req: any, res: Response) => {
   <Gather input="speech" language="es-US" speechModel="phone_call" timeout="5" speechTimeout="2"
     action="${process.env.API_URL}/api/calls/respond/${callRecord?.id}"
     method="POST">
-    <Pause length="1"/>
+    <Pause length="2"/>
   </Gather>
 </Response>`;
 
@@ -254,7 +254,7 @@ export const respondToCall = async (req: Request, res: Response) => {
       ? `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>${audioUrl}</Play>
-  <Pause length="1"/>
+  <Pause length="2"/>
   <Hangup/>
 </Response>`
       : `<?xml version="1.0" encoding="UTF-8"?>
@@ -263,7 +263,7 @@ export const respondToCall = async (req: Request, res: Response) => {
   <Gather input="speech" language="es-US" speechModel="phone_call" timeout="5" speechTimeout="2"
     action="${process.env.API_URL}/api/calls/respond/${callId}"
     method="POST">
-    <Pause length="1"/>
+    <Pause length="2"/>
   </Gather>
 </Response>`;
 
