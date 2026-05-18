@@ -1,11 +1,11 @@
 # VoiceAgent — Estado del proyecto
 
-## Última actualización: Fase A completada
+## Última actualización: Fase B completada
 
 ## ✅ Completado
 - Node.js 24 + npm + Git + Homebrew instalados
-- Repo GitHub: https://github.com/robcas0180/voiceagent
-- Servidor Express + TypeScript
+- Repo GitHub: https://github.com/robcas0180ai/voiceagent
+- Servidor Express + TypeScript corriendo en puerto 3001
 - Supabase conectado — 7 tablas creadas
 - Autenticación JWT completa
 - CRUD completo de campañas y contactos
@@ -16,19 +16,18 @@
 - Importación CSV con normalización automática México
 - Borrar contacto con validación de llamadas
 - ✅ FASE A COMPLETA:
-  - Pipeline automático — Claude detecta intención y mueve contacto
+  - Pipeline automático
   - Botón iniciar campaña completa
   - Resumen visible en dashboard
-  - Configuración del agente verificada — Lupita/CECOSUR funcionando
+  - Configuración del agente verificada — Lupita/CECOSUR
   - Página de llamadas con filtros y transcripción
+- ✅ FASE B COMPLETA:
+  - Grabaciones de llamadas (Twilio Record + botón Escuchar)
+  - Métricas de uso por mes
+  - Navbar compartido en todas las páginas
 - Deploy en producción Railway:
   - Backend: https://voiceagent-production-081f.up.railway.app
   - Frontend: https://merry-tenderness-production-806f.up.railway.app
-
-## ⚠️ Pendiente Fase B
-- Grabaciones de llamadas (audio)
-- Métricas de uso por mes
-- Límites por plan
 
 ## ⚠️ Pendiente Fase C
 - Upgrade Twilio ($20 USD)
@@ -36,6 +35,8 @@
 - Página de registro multi-tenant
 - Stripe billing
 - WhatsApp sin límite
+- Seguridad multi-tenant RLS Supabase
+- Límites por plan
 
 ## 🔧 Stack activo
 - Backend: Node.js + Express + TypeScript — Railway
@@ -62,4 +63,4 @@
 - Tenant: admin@acme.com / Password123!
 
 ## ⏭️ Siguiente sesión
-Fase B: Grabaciones de llamadas + Métricas de uso
+Fase C: Upgrade Twilio + Dominio + Registro multi-tenant + Stripe

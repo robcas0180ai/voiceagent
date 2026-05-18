@@ -114,7 +114,6 @@ export const makeCall = async (req: any, res: Response) => {
 
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Record action="${process.env.API_URL}/api/calls/recording/${callRecord?.id}" method="POST" recordingStatusCallback="${process.env.API_URL}/api/calls/recording/${callRecord?.id}" recordingStatusCallbackMethod="POST" trim="trim-silence"/>
   <Play>${audioUrl}</Play>
   <Gather input="speech" language="es-MX" timeout="5" speechTimeout="2"
     action="${process.env.API_URL}/api/calls/respond/${callRecord?.id}"
@@ -130,9 +129,12 @@ export const makeCall = async (req: any, res: Response) => {
       record: true,
       recordingStatusCallback: `${process.env.API_URL}/api/calls/recording/${callRecord?.id}`,
       recordingStatusCallbackMethod: 'POST',
+      recordingStatusCallbackEvent: ['completed'],
       statusCallback: `${process.env.API_URL}/api/calls/status`,
       statusCallbackMethod: 'POST'
     });
+
+    console.log(`📞 Llamada iniciada: ${call.sid}`);
 
     return res.json({
       message: 'Llamada iniciada',
@@ -253,20 +255,25 @@ export const respondToCall = async (req: Request, res: Response) => {
   }
 };
 
-// Webhook de grabación
 export const recordingCallback = async (req: Request, res: Response) => {
   const { callId } = req.params;
-  const { RecordingUrl, RecordingDuration, RecordingSid } = req.body;
+  const { RecordingUrl, RecordingDuration, RecordingStatus } = req.body;
+
+  console.log(`🎙️ Recording callback — callId: ${callId}, status: ${RecordingStatus}, url: ${RecordingUrl}`);
 
   try {
-    if (RecordingUrl) {
+    if (RecordingUrl && RecordingStatus === 'completed') {
       const recordingUrl = `${RecordingUrl}.mp3`;
-      await supabase
+      const { error } = await supabase
         .from('calls')
         .update({ recording_url: recordingUrl })
         .eq('id', callId);
 
-      console.log(`🎙️ Grabación guardada: ${recordingUrl} (${RecordingDuration}s)`);
+      if (error) {
+        console.error('Error guardando grabación:', error);
+      } else {
+        console.log(`✅ Grabación guardada: ${recordingUrl} (${RecordingDuration}s)`);
+      }
     }
     res.status(200).send('OK');
   } catch (err: any) {
