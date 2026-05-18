@@ -3,16 +3,16 @@ import twilio from 'twilio';
 import { supabase } from '../config/database';
 import { generateResponse, generateSummary } from '../config/claude';
 import { sendCallSummary } from '../config/whatsapp';
+import * as https from 'https';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as https from 'https';
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
 
-const generateAudio = async (text: string): Promise<string> => {
+export const generateAudio = async (text: string): Promise<string> => {
   const apiKey = process.env.ELEVENLABS_API_KEY || '';
   const voiceId = 'FGY2WhTYpPnrIDTdsKH5';
 
@@ -98,6 +98,7 @@ export const makeCall = async (req: any, res: Response) => {
       tone: 'profesional y amable'
     };
 
+    // Generar saludo inicial
     const { text: saludoTexto } = await generateResponse(
       `Inicia la llamada saludando a ${contact.name || 'el cliente'} y presentándote brevemente.`,
       {
@@ -112,9 +113,11 @@ export const makeCall = async (req: any, res: Response) => {
 
     console.log('🤖 Claude generó saludo:', saludoTexto);
 
+    // Generar audio del saludo
     const audioFileName = await generateAudio(saludoTexto);
     const audioUrl = `${process.env.API_URL}/audio/${audioFileName}`;
 
+    // Crear registro de llamada
     const { data: callRecord } = await supabase
       .from('calls')
       .insert({
@@ -134,13 +137,15 @@ export const makeCall = async (req: any, res: Response) => {
       .update({ status: 'called', pipeline_stage: 'called' })
       .eq('id', contactId);
 
+    // TwiML con Media Stream + saludo inicial
+    const wsUrl = process.env.API_URL!.replace('https://', 'wss://').replace('http://', 'ws://');
+    
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" language="es-US" speechModel="phone_call" timeout="10" speechTimeout="3"
-    action="${process.env.API_URL}/api/calls/respond/${callRecord?.id}"
-    method="POST">
-    <Play>${audioUrl}</Play>
-  </Gather>
+  <Connect>
+    <Stream url="${wsUrl}/api/calls/stream/${callRecord?.id}" />
+  </Connect>
+  <Play>${audioUrl}</Play>
 </Response>`;
 
     const call = await twilioClient.calls.create({
@@ -155,7 +160,7 @@ export const makeCall = async (req: any, res: Response) => {
       statusCallbackMethod: 'POST'
     });
 
-    console.log(`📞 Llamada iniciada: ${call.sid}`);
+    console.log(`📞 Llamada iniciada con Media Stream: ${call.sid}`);
 
     return res.json({
       message: 'Llamada iniciada',
@@ -168,110 +173,6 @@ export const makeCall = async (req: any, res: Response) => {
   } catch (err: any) {
     console.error('Error:', err);
     return res.status(500).json({ error: err.message });
-  }
-};
-
-export const respondToCall = async (req: Request, res: Response) => {
-  const { callId } = req.params;
-  const { SpeechResult } = req.body;
-
-  console.log('🎤 Cliente dijo:', SpeechResult);
-
-  try {
-    const { data: callRecord } = await supabase
-      .from('calls')
-      .select('*, contacts(*, campaigns(*))')
-      .eq('id', callId)
-      .single();
-
-    if (!callRecord) {
-      res.type('text/xml');
-      return res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
-    }
-
-    const history = JSON.parse(callRecord.summary || '[]');
-
-    const { data: agentConfig } = await supabase
-      .from('agent_configs')
-      .select('*')
-      .eq('tenant_id', callRecord.contacts.tenant_id)
-      .single();
-
-    const agent = agentConfig || {
-      agent_name: 'Sofía',
-      company_name: 'nuestra empresa',
-      product_description: 'un producto especial',
-      objections: '',
-      tone: 'profesional y amable'
-    };
-
-    const userMessage = SpeechResult || 'El cliente no respondió';
-
-    const { text: respuesta, result } = await generateResponse(
-      userMessage,
-      {
-        agentName: agent.agent_name,
-        companyName: agent.company_name,
-        productDescription: agent.product_description,
-        objections: agent.objections || '',
-        tone: agent.tone
-      },
-      history
-    );
-
-    console.log('🤖 Claude responde:', respuesta, '| Resultado:', result);
-
-    const newHistory = [
-      ...history,
-      { role: 'user', content: userMessage },
-      { role: 'assistant', content: respuesta }
-    ];
-
-    await supabase
-      .from('calls')
-      .update({
-        summary: JSON.stringify(newHistory),
-        result: result !== 'continuar' ? result : callRecord.result
-      })
-      .eq('id', callId);
-
-    if (result && result !== 'continuar') {
-      const newStage = resultToStage(result);
-      await supabase
-        .from('contacts')
-        .update({ pipeline_stage: newStage })
-        .eq('id', callRecord.contact_id);
-      console.log(`📊 Pipeline actualizado: ${newStage}`);
-    }
-
-    const audioFileName = await generateAudio(respuesta);
-    const audioUrl = `${process.env.API_URL}/audio/${audioFileName}`;
-
-    const esFin = result === 'interesado' || result === 'no_interesado' || result === 'callback';
-
-    const twiml = esFin
-      ? `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Play>${audioUrl}</Play>
-  <Pause length="2"/>
-  <Hangup/>
-</Response>`
-      : `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Gather input="speech" language="es-US" speechModel="phone_call" timeout="10" speechTimeout="3"
-    action="${process.env.API_URL}/api/calls/respond/${callId}"
-    method="POST">
-    <Play>${audioUrl}</Play>
-  </Gather>
-</Response>`;
-
-    res.type('text/xml');
-    return res.send(twiml);
-
-  } catch (err: any) {
-    console.error('Error respondiendo:', err);
-    res.type('text/xml');
-    return res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
   }
 };
 
@@ -367,4 +268,8 @@ export const getCalls = async (req: any, res: Response) => {
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
+};
+
+export const respondToCall = async (req: Request, res: Response) => {
+  res.status(200).send('OK');
 };

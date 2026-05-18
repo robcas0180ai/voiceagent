@@ -3,12 +3,15 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import path from 'path';
+import http from 'http';
+import WebSocket from 'ws';
 import { testConnection } from './config/database';
 import authRoutes from './routes/auth.routes';
 import campaignRoutes from './routes/campaigns.routes';
 import callsRoutes from './routes/calls.routes';
 import agentRoutes from './routes/agent.routes';
 import metricsRoutes from './routes/metrics.routes';
+import { handleMediaStream } from './config/mediastream';
 
 dotenv.config();
 
@@ -18,6 +21,7 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 app.use('/audio', express.static(path.join(__dirname, '../public/audio')));
 
@@ -35,14 +39,6 @@ app.get('/', (req, res) => {
   res.json({ message: 'VoiceAgent API corriendo 🚀' });
 });
 
-app.listen(PORT, async () => {
-  console.log(`✅ VoiceAgent API corriendo en http://localhost:${PORT}`);
-  console.log(`📋 Health check: http://localhost:${PORT}/health`);
-  await testConnection();
-});
-
-export default app;
-
 app.get('/debug-env', (req, res) => {
   res.json({
     elevenlabs_key_length: process.env.ELEVENLABS_API_KEY?.length || 0,
@@ -55,14 +51,12 @@ app.get('/debug-env', (req, res) => {
 app.get('/test-eleven', async (req, res) => {
   const https = require('https');
   const apiKey = process.env.ELEVENLABS_API_KEY || '';
-  
   const options = {
     hostname: 'api.elevenlabs.io',
     path: '/v1/voices',
     method: 'GET',
     headers: { 'xi-api-key': apiKey }
   };
-
   const request = https.request(options, (response: any) => {
     let data = '';
     response.on('data', (chunk: any) => data += chunk);
@@ -78,14 +72,12 @@ app.get('/test-tts', async (req, res) => {
   const https = require('https');
   const apiKey = process.env.ELEVENLABS_API_KEY || '';
   const body = JSON.stringify({ text: 'Hola', model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } });
-
   const options = {
     hostname: 'api.elevenlabs.io',
     path: '/v1/text-to-speech/FGY2WhTYpPnrIDTdsKH5',
     method: 'POST',
     headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
   };
-
   const request = https.request(options, (response: any) => {
     const chunks: any[] = [];
     response.on('data', (chunk: any) => chunks.push(chunk));
@@ -101,3 +93,26 @@ app.get('/test-tts', async (req, res) => {
   request.write(body);
   request.end();
 });
+
+// Crear servidor HTTP para WebSocket
+const server = http.createServer(app);
+
+// WebSocket server para Twilio Media Streams
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', (ws, req) => {
+  const url = req.url || '';
+  const match = url.match(/\/api\/calls\/stream\/([^\/]+)/);
+  if (match) {
+    const callId = match[1];
+    handleMediaStream(ws, callId);
+  }
+});
+
+server.listen(PORT, async () => {
+  console.log(`✅ VoiceAgent API corriendo en http://localhost:${PORT}`);
+  console.log(`📋 Health check: http://localhost:${PORT}/health`);
+  await testConnection();
+});
+
+export default app;
