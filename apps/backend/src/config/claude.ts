@@ -40,7 +40,7 @@ RESULT:continuar
 Solo escribe RESULT: cuando la conversación llegue a una conclusión clara. Si la conversación sigue, escribe RESULT:continuar.`;
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 400,
     system: systemPrompt,
     messages: [
@@ -70,7 +70,7 @@ export const generateSummary = async (
     .join('\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-5',
     max_tokens: 200,
     messages: [{
       role: 'user',

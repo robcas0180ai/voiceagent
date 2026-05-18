@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getCampaigns, createCampaign, getCampaign, updateCampaign, deleteCampaign } from '../controllers/campaigns.controller';
+import { getCampaigns, createCampaign, getCampaign, updateCampaign, deleteCampaign, startCampaign } from '../controllers/campaigns.controller';
 import { getContacts, createContact, bulkCreateContacts, updateContactStage, deleteContact } from '../controllers/contacts.controller';
 import { authMiddleware } from '../middlewares/auth';
 
@@ -13,6 +13,7 @@ router.post('/', createCampaign);
 router.get('/:id', getCampaign);
 router.put('/:id', updateCampaign);
 router.delete('/:id', deleteCampaign);
+router.post('/:id/start', startCampaign);
 
 // Contactos
 router.get('/:campaignId/contacts', getContacts);
