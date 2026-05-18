@@ -73,3 +73,31 @@ app.get('/test-eleven', async (req, res) => {
   request.on('error', (e: any) => res.json({ error: e.message }));
   request.end();
 });
+
+app.get('/test-tts', async (req, res) => {
+  const https = require('https');
+  const apiKey = process.env.ELEVENLABS_API_KEY || '';
+  const body = JSON.stringify({ text: 'Hola', model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75 } });
+
+  const options = {
+    hostname: 'api.elevenlabs.io',
+    path: '/v1/text-to-speech/FGY2WhTYpPnrIDTdsKH5',
+    method: 'POST',
+    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+  };
+
+  const request = https.request(options, (response: any) => {
+    const chunks: any[] = [];
+    response.on('data', (chunk: any) => chunks.push(chunk));
+    response.on('end', () => {
+      if (response.statusCode === 200) {
+        res.json({ status: 200, message: 'TTS funciona', bytes: Buffer.concat(chunks).length });
+      } else {
+        res.json({ status: response.statusCode, body: Buffer.concat(chunks).toString().substring(0, 300) });
+      }
+    });
+  });
+  request.on('error', (e: any) => res.json({ error: e.message }));
+  request.write(body);
+  request.end();
+});
