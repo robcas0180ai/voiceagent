@@ -37,7 +37,10 @@ RESULT:no_interesado
 RESULT:callback
 RESULT:continuar
 
-Solo escribe RESULT: cuando la conversación llegue a una conclusión clara. Si la conversación sigue, escribe RESULT:continuar.`;
+RESULT:interesado = solo cuando el cliente ya dio su nombre, teléfono o correo confirmados.
+RESULT:no_interesado = cuando el cliente rechazó claramente.
+RESULT:callback = cuando el cliente pidió que le llamen después.
+RESULT:continuar = en todos los demás casos, incluyendo cuando el cliente mostró interés pero aún no dio sus datos.`;
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',

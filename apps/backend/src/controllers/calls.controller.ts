@@ -125,6 +125,8 @@ export const makeCall = async (req: any, res: Response) => {
         contact_id: contactId,
         campaign_id: contact.campaign_id,
         status: 'initiated',
+        call_sid: '',
+        
         result: 'en_curso',
         summary: JSON.stringify([{ role: 'assistant', content: saludoTexto }]),
         started_at: new Date().toISOString()
@@ -159,9 +161,15 @@ const wsUrl = process.env.API_URL!.replace('https://', 'wss://').replace('http:/
       recordingStatusCallbackMethod: 'POST',
       recordingStatusCallbackEvent: ['completed'],
       statusCallback: `${process.env.API_URL}/api/calls/status`,
-      statusCallbackMethod: 'POST'
+      statusCallbackMethod: 'POST',
+      machineDetection: 'DetectMessageEnd',
+      asyncAmd: 'true',
+      asyncAmdStatusCallback: `${process.env.API_URL}/api/calls/amd`,
+      asyncAmdStatusCallbackMethod: 'POST'
     });
 
+    // Guardar call_sid en DB
+    await supabase.from('calls').update({ call_sid: call.sid }).eq('id', callRecord?.id);
     console.log(`📞 Llamada iniciada con Media Stream: ${call.sid}`);
 
     return res.json({
@@ -273,5 +281,22 @@ export const getCalls = async (req: any, res: Response) => {
 };
 
 export const respondToCall = async (req: Request, res: Response) => {
+  res.status(200).send('OK');
+};
+
+export const amdCallback = async (req: Request, res: Response) => {
+  const { CallSid, AnsweredBy } = req.body;
+  console.log(`🤖 AMD: CallSid=${CallSid}, AnsweredBy=${AnsweredBy}`);
+
+  if (AnsweredBy === 'machine_end_beep' || AnsweredBy === 'machine_end_silence' || AnsweredBy === 'machine_end_other') {
+    console.log('📵 Buzón de voz detectado — colgando');
+    try {
+      const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+      await twilio.calls(CallSid).update({ status: 'completed' });
+    } catch(e: any) {
+      console.error('Error colgando:', e.message);
+    }
+  }
+
   res.status(200).send('OK');
 };
