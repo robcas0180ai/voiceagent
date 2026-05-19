@@ -338,6 +338,8 @@ export const recordingProxy = async (req: Request, res: Response) => {
     };
 
     res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     const request = https.request(options, (response: any) => {
       response.pipe(res);
     });
