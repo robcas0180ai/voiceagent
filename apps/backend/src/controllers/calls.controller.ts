@@ -231,10 +231,10 @@ export const callStatus = async (req: Request, res: Response) => {
     console.log(`📞 Llamada ${CallSid} — Status: ${CallStatus} — Duración: ${CallDuration}s`);
 
     if (CallStatus === 'completed' && callRecord) {
-      if (parseInt(CallDuration || '0') < 5) {
+      if (parseInt(CallDuration || '0') < 5 || CallStatus === 'no-answer' || CallStatus === 'busy' || CallStatus === 'failed') {
         await supabase
           .from('contacts')
-          .update({ pipeline_stage: 'to_call' })
+          .update({ pipeline_stage: 'to_call', status: 'pending' })
           .eq('id', callRecord.contacts?.id);
         console.log('📵 No contestó — regresando a Por llamar');
       }
