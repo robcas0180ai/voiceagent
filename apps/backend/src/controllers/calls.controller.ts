@@ -201,46 +201,19 @@ export const recordingCallback = async (req: Request, res: Response) => {
       const fileName = `recording_${callId}.mp3`;
       const filePath = require('path').join(audioDir, fileName);
 
-      try {
-        const https = require('https');
-        const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
-        const authToken = process.env.TWILIO_AUTH_TOKEN || '';
-        const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+      // Guardar URL de proxy que autenticará con Twilio
+      const proxyUrl = `${process.env.API_URL}/api/calls/recording-proxy/${callId}`;
+      const { error } = await supabase
+        .from('calls')
+        .update({ recording_url: proxyUrl })
+        .eq('id', callId);
 
-        await new Promise<void>((resolve, reject) => {
-          const url = new URL(twilioMp3Url);
-          const options = {
-            hostname: url.hostname,
-            path: url.pathname,
-            headers: { 'Authorization': `Basic ${auth}` }
-          };
-          const req = https.request(options, (res: any) => {
-            const chunks: Buffer[] = [];
-            res.on('data', (chunk: any) => chunks.push(chunk));
-            res.on('end', () => {
-              require('fs').writeFileSync(filePath, Buffer.concat(chunks));
-              resolve();
-            });
-          });
-          req.on('error', reject);
-          req.end();
-        });
-
-        const localUrl = `${process.env.API_URL}/audio/${fileName}`;
-        const { error } = await supabase
-          .from('calls')
-          .update({ recording_url: localUrl })
-          .eq('id', callId);
-
-        if (error) {
-          console.error('Error guardando grabación:', error);
-        } else {
-          console.log(`✅ Grabación guardada localmente: ${localUrl} (${RecordingDuration}s)`);
-        }
-      } catch(e: any) {
-        console.error('Error descargando grabación:', e.message);
-        // Fallback: guardar URL de Twilio
-        await supabase.from('calls').update({ recording_url: twilioMp3Url }).eq('id', callId);
+      if (error) {
+        console.error('Error guardando grabación:', error);
+      } else {
+        console.log(`✅ Grabación guardada via proxy: ${proxyUrl} (${RecordingDuration}s)`);
+        // Guardar también la URL original de Twilio
+        await supabase.from('calls').update({ recording_sid: RecordingUrl }).eq('id', callId);
       }
     }
     res.status(200).send('OK');
@@ -336,4 +309,41 @@ export const amdCallback = async (req: Request, res: Response) => {
   }
 
   res.status(200).send('OK');
+};
+
+export const recordingProxy = async (req: Request, res: Response) => {
+  const { callId } = req.params;
+  try {
+    const { data: callRecord } = await supabase
+      .from('calls')
+      .select('recording_sid')
+      .eq('id', callId)
+      .single();
+
+    if (!callRecord?.recording_sid) {
+      return res.status(404).json({ error: 'Grabación no encontrada' });
+    }
+
+    const https = require('https');
+    const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
+    const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+    const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+    const twilioUrl = `${callRecord.recording_sid}.mp3`;
+    const url = new URL(twilioUrl);
+
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname,
+      headers: { 'Authorization': `Basic ${auth}` }
+    };
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    const request = https.request(options, (response: any) => {
+      response.pipe(res);
+    });
+    request.on('error', (e: any) => res.status(500).json({ error: e.message }));
+    request.end();
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 };
