@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation';
 import api from '@/lib/api';
 import { Phone, Plus, ArrowLeft, LogOut, Upload, X, Trash2 } from 'lucide-react';
 import CSVUpload from '@/components/ui/CSVUpload';
+import Navbar from '@/components/ui/Navbar';
 
 const normalizePhone = (raw: string): string => {
   let digits = String(raw).replace(/\D/g, '');
@@ -113,21 +114,7 @@ export default function CampaignDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <span className="font-semibold text-lg">VoiceAgent</span>
-          <div className="flex gap-4 text-sm">
-            <button onClick={() => router.push('/dashboard')} className="text-gray-400 hover:text-white transition-colors">Dashboard</button>
-            <button onClick={() => router.push('/campaigns')} className="text-white font-medium">Campañas</button>
-            <button onClick={() => router.push('/pipeline')} className="text-gray-400 hover:text-white transition-colors">Pipeline</button>
-            <button onClick={() => router.push('/agent')} className="text-gray-400 hover:text-white transition-colors">Agente IA</button>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-400">{user?.email}</span>
-          <button onClick={logout} className="text-gray-400 hover:text-white"><LogOut size={16} /></button>
-        </div>
-      </nav>
+      <Navbar />
 
       <div className="p-6 max-w-7xl mx-auto">
         <button onClick={() => router.push('/campaigns')} className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-4 transition-colors">
