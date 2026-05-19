@@ -194,16 +194,53 @@ export const recordingCallback = async (req: Request, res: Response) => {
 
   try {
     if (RecordingUrl && RecordingStatus === 'completed') {
-      const recordingUrl = `${RecordingUrl}.mp3`;
-      const { error } = await supabase
-        .from('calls')
-        .update({ recording_url: recordingUrl })
-        .eq('id', callId);
+      // Descargar MP3 desde Twilio y servirlo localmente
+      const twilioMp3Url = `${RecordingUrl}.mp3`;
+      const audioDir = require('path').join(__dirname, '../../public/audio');
+      if (!require('fs').existsSync(audioDir)) require('fs').mkdirSync(audioDir, { recursive: true });
+      const fileName = `recording_${callId}.mp3`;
+      const filePath = require('path').join(audioDir, fileName);
 
-      if (error) {
-        console.error('Error guardando grabación:', error);
-      } else {
-        console.log(`✅ Grabación guardada: ${recordingUrl} (${RecordingDuration}s)`);
+      try {
+        const https = require('https');
+        const accountSid = process.env.TWILIO_ACCOUNT_SID || '';
+        const authToken = process.env.TWILIO_AUTH_TOKEN || '';
+        const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+
+        await new Promise<void>((resolve, reject) => {
+          const url = new URL(twilioMp3Url);
+          const options = {
+            hostname: url.hostname,
+            path: url.pathname,
+            headers: { 'Authorization': `Basic ${auth}` }
+          };
+          const req = https.request(options, (res: any) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk: any) => chunks.push(chunk));
+            res.on('end', () => {
+              require('fs').writeFileSync(filePath, Buffer.concat(chunks));
+              resolve();
+            });
+          });
+          req.on('error', reject);
+          req.end();
+        });
+
+        const localUrl = `${process.env.API_URL}/audio/${fileName}`;
+        const { error } = await supabase
+          .from('calls')
+          .update({ recording_url: localUrl })
+          .eq('id', callId);
+
+        if (error) {
+          console.error('Error guardando grabación:', error);
+        } else {
+          console.log(`✅ Grabación guardada localmente: ${localUrl} (${RecordingDuration}s)`);
+        }
+      } catch(e: any) {
+        console.error('Error descargando grabación:', e.message);
+        // Fallback: guardar URL de Twilio
+        await supabase.from('calls').update({ recording_url: twilioMp3Url }).eq('id', callId);
       }
     }
     res.status(200).send('OK');
